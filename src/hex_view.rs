@@ -29,6 +29,12 @@ impl fmt::Display for ByteAsciiRepr {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+struct Selection {
+    cursor: usize,
+    tail: usize,
+}
+
 pub struct HexView {
     data: Vec<u8>,
     size: (u16, u16),
@@ -144,7 +150,7 @@ impl HexView {
     }
 
     pub fn run_event_loop(mut self, stdout: &mut impl Write) -> Result<()> {
-        execute!(stdout, terminal::EnterAlternateScreen,)?;
+        execute!(stdout, terminal::EnterAlternateScreen)?;
 
         self.draw(stdout)?;
 
@@ -164,7 +170,7 @@ impl HexView {
                 },
             }
         }
-        execute!(stdout, terminal::LeaveAlternateScreen).unwrap();
+        execute!(stdout, terminal::LeaveAlternateScreen)?;
         terminal::disable_raw_mode()?;
         Ok(())
     }
