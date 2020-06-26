@@ -9,3 +9,4 @@ edition = "2018"
 [dependencies]
 cursive = "0.15.0"
 crossterm = "0.17.5"
+xi-rope = "0.3.0"
