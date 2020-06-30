@@ -8,6 +8,7 @@ use crossterm::{
     execute, queue, style, terminal, Result,
 };
 
+use super::selection::*;
 use std::io::{stdout, Write};
 
 const VERTICAL: &str = "│";
@@ -16,6 +17,74 @@ const VERTICAL: &str = "│";
 enum State {
     Quitting,
     Normal,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum Priority {
+    Basic,
+    Mark,
+    Selection,
+    Cursor,
+}
+
+#[derive(Debug, Clone)]
+struct PrioritizedStyle {
+    style: style::ContentStyle,
+    priority: Priority,
+}
+
+#[derive(Debug, Clone)]
+enum StylingCommand {
+    Start(PrioritizedStyle),
+    End(PrioritizedStyle),
+    StartEnd(PrioritizedStyle, PrioritizedStyle),
+    None,
+}
+
+impl StylingCommand {
+    fn start_style(&self) -> Option<&style::ContentStyle> {
+        match self {
+            StylingCommand::Start(PrioritizedStyle { style, .. }) => Some(style),
+            StylingCommand::StartEnd(PrioritizedStyle { style, .. }, _) => Some(style),
+            _ => None,
+        }
+    }
+    fn end_style(&self) -> Option<&style::ContentStyle> {
+        match self {
+            StylingCommand::End(PrioritizedStyle { style, .. }) => Some(style),
+            StylingCommand::StartEnd(_, PrioritizedStyle { style, .. }) => Some(style),
+            _ => None,
+        }
+    }
+    fn with_start_style(self, style: PrioritizedStyle) -> StylingCommand {
+        match self {
+            StylingCommand::None | StylingCommand::Start(_) => StylingCommand::Start(style),
+            StylingCommand::End(e) | StylingCommand::StartEnd(_, e) => {
+                StylingCommand::StartEnd(style, e)
+            }
+        }
+    }
+    fn with_end_style(self, style: PrioritizedStyle) -> StylingCommand {
+        match self {
+            StylingCommand::None | StylingCommand::End(_) => StylingCommand::End(style),
+            StylingCommand::Start(s) | StylingCommand::StartEnd(s, _) => {
+                StylingCommand::StartEnd(s, style)
+            }
+        }
+    }
+}
+
+fn queue_style(stdout: &mut impl Write, style: &style::ContentStyle) -> Result<()> {
+    if let Some(fg) = style.foreground_color {
+        queue!(stdout, style::SetForegroundColor(fg))?;
+    }
+    if let Some(bg) = style.background_color {
+        queue!(stdout, style::SetBackgroundColor(bg))?;
+    }
+    if !style.attributes.is_empty() {
+        queue!(stdout, style::SetAttributes(style.attributes))?;
+    }
+    Ok(())
 }
 
 struct ByteAsciiRepr(u8);
@@ -29,19 +98,12 @@ impl fmt::Display for ByteAsciiRepr {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-struct Selection {
-    cursor: usize,
-    tail: usize,
-}
-
 pub struct HexView {
     data: Vec<u8>,
     size: (u16, u16),
     bytes_per_line: usize,
     start_offset: usize,
-    selections: Vec<Range<usize>>,
-    main_selection: usize,
+    selection: Selection,
 
     state: State,
 }
@@ -52,9 +114,8 @@ impl HexView {
             data,
             bytes_per_line: 0x10,
             start_offset: 0,
-            selections: vec![0..1],
-            main_selection: 0,
             size: terminal::size().unwrap(),
+            selection: Selection::new(),
 
             state: State::Normal,
         }
@@ -71,19 +132,40 @@ impl HexView {
         hex_digits_in_offset
     }
 
-    fn draw_hex_row(&self, stdout: &mut impl Write, bytes: &[u8]) -> Result<()> {
-        for byte in bytes.iter().copied() {
-            queue!(stdout, style::Print(format!("{:02x} ", byte)))?;
+    fn draw_hex_row(
+        &self,
+        stdout: &mut impl Write,
+        styled_bytes: impl IntoIterator<Item = (u8, StylingCommand)>,
+    ) -> Result<()> {
+        for (byte, style_cmd) in styled_bytes.into_iter() {
+            if let Some(start_cmd) = style_cmd.start_style() {
+                queue_style(stdout, start_cmd)?;
+            }
+            queue!(stdout, style::Print(format!("{:02x}", byte)))?;
+            if let Some(end_cmd) = style_cmd.end_style() {
+                queue_style(stdout, end_cmd)?;
+            }
+            queue!(stdout, style::Print(format!(" ")))?;
         }
         Ok(())
     }
 
-    fn draw_ascii_row(&self, stdout: &mut impl Write, bytes: &[u8]) -> Result<()> {
+    fn draw_ascii_row(
+        &self,
+        stdout: &mut impl Write,
+        styled_bytes: impl IntoIterator<Item = (u8, StylingCommand)>,
+    ) -> Result<()> {
         let bytes_per_line = self.bytes_per_line;
         let hex_digits_in_offset = self.hex_digits_in_offset();
 
-        for byte in bytes.iter().copied() {
+        for (byte, style_cmd) in styled_bytes.into_iter() {
+            if let Some(start_cmd) = style_cmd.start_style() {
+                queue_style(stdout, start_cmd);
+            }
             queue!(stdout, style::Print(format!("{}", ByteAsciiRepr(byte))))?;
+            if let Some(end_cmd) = style_cmd.end_style() {
+                queue_style(stdout, end_cmd);
+            }
         }
         Ok(())
     }
@@ -106,6 +188,7 @@ impl HexView {
         stdout: &mut impl Write,
         offset: usize,
         digits_in_offset: usize,
+        mark_commands: &[StylingCommand],
     ) -> Result<()> {
         let end = cmp::min(self.data.len(), offset + self.bytes_per_line);
         let bytes = &self.data[offset..end];
@@ -117,7 +200,10 @@ impl HexView {
         )?;
         self.draw_offset(stdout, offset, digits_in_offset)?;
         self.draw_separator(stdout)?;
-        self.draw_hex_row(stdout, bytes)?;
+        self.draw_hex_row(
+            stdout,
+            bytes.iter().copied().zip(mark_commands.iter().cloned()),
+        )?;
         queue!(
             stdout,
             cursor::MoveTo(
@@ -126,7 +212,10 @@ impl HexView {
             ),
         )?;
         self.draw_separator(stdout)?;
-        self.draw_ascii_row(stdout, bytes)?;
+        self.draw_ascii_row(
+            stdout,
+            bytes.iter().copied().zip(mark_commands.iter().cloned()),
+        )?;
         Ok(())
     }
 
@@ -138,11 +227,92 @@ impl HexView {
             )
     }
 
+    fn default_style(&self) -> PrioritizedStyle {
+        PrioritizedStyle {
+            style: style::ContentStyle::new()
+                .foreground(style::Color::White)
+                .background(style::Color::Black),
+            priority: Priority::Basic,
+        }
+    }
+    fn selection_style(&self) -> PrioritizedStyle {
+        PrioritizedStyle {
+            style: style::ContentStyle::new()
+                .foreground(style::Color::Grey)
+                .background(style::Color::DarkYellow),
+            priority: Priority::Selection,
+        }
+    }
+    fn caret_style(&self) -> PrioritizedStyle {
+        PrioritizedStyle {
+            style: style::ContentStyle::new()
+                .foreground(style::Color::AnsiValue(16))
+                .background(style::Color::White),
+            priority: Priority::Cursor,
+        }
+    }
+
+    fn mark_commands(&self, visible: Range<usize>) -> Vec<StylingCommand> {
+        let mut mark_commands = vec![StylingCommand::None; visible.len()];
+        let mut command_stack = vec![self.default_style()];
+        let mut selected_regions = self.selection.regions_in_range(visible.start, visible.end);
+
+        let start = visible.start;
+        for i in visible {
+            let normalized = i - start;
+            if !selected_regions.is_empty() {
+                if selected_regions[0].start == i {
+                    command_stack.push(self.selection_style());
+                    mark_commands[normalized] = mark_commands[normalized]
+                        .clone()
+                        .with_start_style(command_stack.last().unwrap().clone());
+                }
+                if selected_regions[0].caret() == i {
+                    let base_style = command_stack.last().unwrap().clone();
+                    mark_commands[normalized] = mark_commands[normalized]
+                        .clone()
+                        .with_start_style(self.caret_style())
+                        .with_end_style(base_style);
+                }
+                if selected_regions[0].end == i + 1 {
+                    command_stack.pop();
+                    selected_regions = &selected_regions[1..];
+                    mark_commands[normalized] = mark_commands[normalized]
+                        .clone()
+                        .with_end_style(command_stack.last().unwrap().clone());
+                }
+            }
+
+            if i % self.bytes_per_line == 0 && mark_commands[normalized].start_style().is_none() {
+                // line starts: restore applied style
+                mark_commands[normalized] = mark_commands[normalized]
+                    .clone()
+                    .with_start_style(command_stack.last().unwrap().clone());
+            } else if (i + 1) % self.bytes_per_line == 0 {
+                // line ends: apply default style
+                mark_commands[normalized] = mark_commands[normalized]
+                    .clone()
+                    .with_end_style(self.default_style());
+            }
+        }
+
+        mark_commands
+    }
+
     fn draw(&self, stdout: &mut impl Write) -> Result<()> {
         queue!(stdout, terminal::Clear(terminal::ClearType::All))?;
         let digits_in_offset = self.hex_digits_in_offset();
-        for i in self.visible_bytes().step_by(self.bytes_per_line) {
-            self.draw_row(stdout, i, digits_in_offset)?;
+        let visible_bytes = self.visible_bytes();
+        let max_bytes = visible_bytes.len();
+        let mark_commands = self.mark_commands(visible_bytes.clone());
+
+        for i in visible_bytes.step_by(self.bytes_per_line) {
+            self.draw_row(
+                stdout,
+                i,
+                digits_in_offset,
+                &mark_commands[i..std::cmp::min(max_bytes, i + self.bytes_per_line)],
+            )?;
         }
 
         stdout.flush()?;
