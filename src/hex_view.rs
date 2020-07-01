@@ -444,6 +444,14 @@ impl HexView {
                     }) if modifiers == KeyModifiers::ALT => {
                         self.state = State::Split;
                     }
+                    Event::Key(KeyEvent {
+                        code: KeyCode::Char(ch),
+                        modifiers,
+                    }) if ch == 'g' || ch == 'G' => {
+                        self.state = State::JumpTo{
+                            extend: ch == 'G',
+                        };
+                    }
                     evt => self.handle_event_default(stdout, evt)?,
                 },
                 State::Split => match event::read()? {
@@ -464,13 +472,26 @@ impl HexView {
                     }
                     evt => self.handle_event_default(stdout, evt)?,
                 },
-                /*State::JumpTo{extend} => match event::read()? {
-                    Event::Key(KeyEvent { code, modifiers }) if key_direction(code).is_some() => {
+                State::JumpTo{extend} => match event::read()? {
+                    Event::Key(KeyEvent { code, .. }) if key_direction(code).is_some() => {
+                        let direction = key_direction(code).unwrap();
+                        let max_bytes = self.data.len();
+                        let bytes_per_line = self.bytes_per_line;
+						let invalidated_rows = if extend {
+    						self.map_selections(|region| {
+    							vec![region.extend_to_boundary(direction, bytes_per_line, max_bytes)]
+    						})
+						} else {
+    						self.map_selections(|region| {
+								vec![region.jump_to_boundary(direction, bytes_per_line, max_bytes)]
+    						})
+						};
 
+						self.draw_rows(stdout, &invalidated_rows)?;
+						self.state = State::Normal;
                     },
                     evt => self.handle_event_default(stdout, evt)?,
-                },*/
-                _ => todo!(),
+                },
             }
         }
         execute!(stdout, cursor::Show, terminal::LeaveAlternateScreen)?;
