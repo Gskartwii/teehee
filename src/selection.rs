@@ -7,7 +7,7 @@ pub struct Selection {
     // INVARIANT: regions should be sorted by starting points
     // INVARIANT: regions should not overlap
     regions: Vec<SelRegion>,
-    main_selection: usize,
+    pub main_selection: usize,
 }
 
 impl Default for Selection {
@@ -86,6 +86,14 @@ impl Selection {
         }
         self.regions = regions_out;
         self.main_selection = new_main_sel;
+    }
+
+    pub fn len(&self) -> usize {
+        self.regions.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        false
     }
 }
 

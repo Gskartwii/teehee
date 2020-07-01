@@ -7,12 +7,15 @@ use crossterm::{
     cursor, event,
     event::{Event, KeyCode, KeyEvent, KeyModifiers},
     execute, queue, style, terminal, Result,
+    style::{StyledContent, Color},
 };
 
 use super::selection::*;
 use std::io::Write;
 
 const VERTICAL: &str = "│";
+const LEFTARROW: &str = "";
+const RIGHTARROW: &str = "";
 
 #[derive(Debug, Clone, Copy)]
 enum State {
@@ -20,6 +23,18 @@ enum State {
     Normal,
     JumpTo { extend: bool },
     Split,
+}
+
+impl State {
+    fn name(&self) -> &'static str {
+		match self {
+    		State::Quitting => "QUIT",
+    		State::Normal => "NORMAL",
+    		State::JumpTo{extend: true} => "EXTEND",
+    		State::JumpTo{extend: false} => "JUMP",
+    		State::Split => "SPLIT",
+		}
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -329,6 +344,34 @@ impl HexView {
         mark_commands
     }
 
+    fn draw_statusline(&self, stdout: &mut impl Write) -> Result<()> {
+        queue!(
+            stdout,
+            cursor::MoveTo(0, self.size.1),
+            terminal::Clear(terminal::ClearType::CurrentLine),
+            style::PrintStyledContent(
+                style::style(format!(" {} ", self.state.name()))
+                .with(Color::AnsiValue(16))
+                .on(Color::DarkYellow)
+            ),
+            style::PrintStyledContent(
+                style::style(RIGHTARROW)
+                .with(Color::DarkYellow)
+                .on(Color::White)
+            ),
+            style::PrintStyledContent(
+                style::style(format!(" {} sels ({}) ", self.selection.len(), self.selection.main_selection + 1))
+                .with(Color::AnsiValue(16))
+                .on(Color::White)
+            ),
+            style::PrintStyledContent(
+                style::style(RIGHTARROW)
+                .with(Color::White)
+            )
+        )?;
+        Ok(())
+    }
+
     fn draw_rows(&self, stdout: &mut impl Write, invalidated_rows: &HashSet<u16>) -> Result<()> {
         let digits_in_offset = self.hex_digits_in_offset();
         let visible_bytes = self.visible_bytes();
@@ -347,7 +390,6 @@ impl HexView {
             )?;
         }
 
-        stdout.flush()?;
         Ok(())
     }
 
@@ -367,7 +409,8 @@ impl HexView {
             )?;
         }
 
-        stdout.flush()?;
+        self.draw_statusline(stdout)?;
+
         Ok(())
     }
 
@@ -470,6 +513,7 @@ impl HexView {
                         self.draw_rows(stdout, &invalidated_rows)?;
                         self.state = State::Normal;
                     }
+                    Event::Key(_) => self.state = State::Normal,
                     evt => self.handle_event_default(stdout, evt)?,
                 },
                 State::JumpTo{extend} => match event::read()? {
@@ -490,9 +534,12 @@ impl HexView {
 						self.draw_rows(stdout, &invalidated_rows)?;
 						self.state = State::Normal;
                     },
+                    Event::Key(_) => self.state = State::Normal,
                     evt => self.handle_event_default(stdout, evt)?,
                 },
             }
+            self.draw_statusline(stdout)?;
+            stdout.flush()?;
         }
         execute!(stdout, cursor::Show, terminal::LeaveAlternateScreen)?;
         terminal::disable_raw_mode()?;
