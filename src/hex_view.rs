@@ -87,6 +87,17 @@ fn key_direction(key_code: KeyCode) -> Option<Direction> {
     }
 }
 
+fn split_width(key_code: KeyCode) -> Option<usize> {
+    match key_code {
+        KeyCode::Char('b') => Some(1),
+        KeyCode::Char('w') => Some(2),
+        KeyCode::Char('d') => Some(4),
+        KeyCode::Char('q') => Some(8),
+        KeyCode::Char('o') => Some(16),
+        _ => None,
+    }
+}
+
 fn queue_style(stdout: &mut impl Write, style: &style::ContentStyle) -> Result<()> {
     if let Some(fg) = style.foreground_color {
         queue!(stdout, style::SetForegroundColor(fg))?;
@@ -436,13 +447,15 @@ impl HexView {
                     evt => self.handle_event_default(stdout, evt)?,
                 },
                 State::Split => match event::read()? {
-                    Event::Key(KeyEvent {
-                        code: KeyCode::Char('b'),
-                        ..
-                    }) => {
+                    Event::Key(KeyEvent { code, .. }) if split_width(code).is_some() => {
+                        let width = split_width(code).unwrap();
                         let invalidated_rows = self.map_selections(|region| {
                             (region.min()..=region.max())
-                                .map(|pos| SelRegion::new(pos, pos))
+                                .step_by(width)
+                                .map(|pos| {
+                                    SelRegion::new(pos, cmp::min(region.max(), pos + width - 1))
+                                        .with_direction(region.backward())
+                                })
                                 .collect()
                         });
 

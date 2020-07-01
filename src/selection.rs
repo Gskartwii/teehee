@@ -116,6 +116,16 @@ impl SelRegion {
         SelRegion { caret, tail }
     }
 
+    pub fn with_direction(self, backward: bool) -> SelRegion {
+        let max = cmp::max(self.caret, self.tail);
+        let min = cmp::min(self.caret, self.tail);
+        if backward {
+            SelRegion::new(min, max)
+        } else {
+            SelRegion::new(max, min)
+        }
+    }
+
     pub fn max(&self) -> usize {
         cmp::max(self.caret, self.tail)
     }
