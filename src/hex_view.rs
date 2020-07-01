@@ -5,7 +5,7 @@ use std::ops::Range;
 
 use crossterm::{
     cursor, event,
-    event::{Event, KeyCode},
+    event::{Event, KeyCode, KeyEvent},
     execute, queue, style, terminal, Result,
 };
 
@@ -72,6 +72,16 @@ impl StylingCommand {
                 StylingCommand::StartEnd(s, style)
             }
         }
+    }
+}
+
+fn key_direction(key_code: KeyCode) -> Option<Direction> {
+    match key_code {
+        KeyCode::Char('h') => Some(Direction::Left),
+        KeyCode::Char('j') => Some(Direction::Down),
+        KeyCode::Char('k') => Some(Direction::Up),
+        KeyCode::Char('l') => Some(Direction::Right),
+        _ => None,
     }
 }
 
@@ -368,14 +378,17 @@ impl HexView {
                     Event::Key(event) if event.code == KeyCode::Esc => {
                         self.state = State::Quitting;
                     }
-                    Event::Key(event) if event.code == KeyCode::Char('l') => {
+                    Event::Key(KeyEvent { code, .. }) if key_direction(code).is_some() => {
                         let max_bytes = self.data.len();
                         let bytes_per_line = self.bytes_per_line;
                         let mut invalidated_ranges = Vec::new();
                         self.selection.map_selections(|region| {
                             invalidated_ranges.push(region.start..region.end);
-                            let new =
-                                region.simple_move(Direction::Right, bytes_per_line, max_bytes);
+                            let new = region.simple_move(
+                                key_direction(code).unwrap(),
+                                bytes_per_line,
+                                max_bytes,
+                            );
                             invalidated_ranges.push(new.start..new.end);
                             new
                         });
