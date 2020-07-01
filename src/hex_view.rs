@@ -1,4 +1,5 @@
 use std::cmp;
+use std::collections::HashSet;
 use std::fmt;
 use std::ops::Range;
 
@@ -178,9 +179,17 @@ impl HexView {
         queue!(stdout, style::Print(format!(" {} ", VERTICAL)))
     }
 
-    fn offset_to_row(&self, offset: usize) -> u16 {
-        debug_assert!(offset >= self.start_offset);
-        ((offset - self.start_offset) / self.bytes_per_line) as u16
+    fn offset_to_row(&self, offset: usize) -> Option<u16> {
+        if offset < self.start_offset {
+            return None;
+        }
+        let normalized_offset = offset - self.start_offset;
+        let bytes_per_line = self.bytes_per_line;
+        let max_bytes = bytes_per_line * self.size.1 as usize;
+        if normalized_offset > max_bytes {
+            return None;
+        }
+        Some((normalized_offset / bytes_per_line) as u16)
     }
 
     fn draw_row(
@@ -192,10 +201,11 @@ impl HexView {
     ) -> Result<()> {
         let end = cmp::min(self.data.len(), offset + self.bytes_per_line);
         let bytes = &self.data[offset..end];
+        let row_num = self.offset_to_row(offset).unwrap();
 
         queue!(
             stdout,
-            cursor::MoveTo(0, self.offset_to_row(offset)),
+            cursor::MoveTo(0, row_num),
             style::Print(" ".to_string()), // Padding
         )?;
         self.draw_offset(stdout, offset, digits_in_offset)?;
@@ -208,7 +218,7 @@ impl HexView {
             stdout,
             cursor::MoveTo(
                 (1 + digits_in_offset + 3 + 3 * self.bytes_per_line - 1) as u16,
-                self.offset_to_row(offset),
+                row_num,
             ),
         )?;
         self.draw_separator(stdout)?;
@@ -299,6 +309,28 @@ impl HexView {
         mark_commands
     }
 
+    fn draw_rows(&self, stdout: &mut impl Write, invalidated_rows: &HashSet<u16>) -> Result<()> {
+        let digits_in_offset = self.hex_digits_in_offset();
+        let visible_bytes = self.visible_bytes();
+        let max_bytes = visible_bytes.len();
+        let mark_commands = self.mark_commands(visible_bytes.clone());
+
+        for i in visible_bytes.step_by(self.bytes_per_line) {
+            if !invalidated_rows.contains(&self.offset_to_row(i).unwrap()) {
+                continue;
+            }
+            self.draw_row(
+                stdout,
+                i,
+                digits_in_offset,
+                &mark_commands[i..std::cmp::min(max_bytes, i + self.bytes_per_line)],
+            )?;
+        }
+
+        stdout.flush()?;
+        Ok(())
+    }
+
     fn draw(&self, stdout: &mut impl Write) -> Result<()> {
         queue!(stdout, terminal::Clear(terminal::ClearType::All))?;
         let digits_in_offset = self.hex_digits_in_offset();
@@ -320,7 +352,7 @@ impl HexView {
     }
 
     pub fn run_event_loop(mut self, stdout: &mut impl Write) -> Result<()> {
-        execute!(stdout, terminal::EnterAlternateScreen)?;
+        execute!(stdout, terminal::EnterAlternateScreen, cursor::Hide)?;
 
         self.draw(stdout)?;
 
@@ -339,16 +371,27 @@ impl HexView {
                     Event::Key(event) if event.code == KeyCode::Char('l') => {
                         let max_bytes = self.data.len();
                         let bytes_per_line = self.bytes_per_line;
+                        let mut invalidated_ranges = Vec::new();
                         self.selection.map_selections(|region| {
-                            region.simple_move(Direction::Right, bytes_per_line, max_bytes)
+                            invalidated_ranges.push(region.start..region.end);
+                            let new =
+                                region.simple_move(Direction::Right, bytes_per_line, max_bytes);
+                            invalidated_ranges.push(new.start..new.end);
+                            new
                         });
-                        self.draw(stdout)?;
+                        let mut invalidated_rows = HashSet::new();
+                        for offset in invalidated_ranges.into_iter().flatten() {
+                            if let Some(invalidated_row) = self.offset_to_row(offset) {
+                                invalidated_rows.insert(invalidated_row);
+                            }
+                        }
+                        self.draw_rows(stdout, &invalidated_rows)?;
                     }
                     _ => {}
                 },
             }
         }
-        execute!(stdout, terminal::LeaveAlternateScreen)?;
+        execute!(stdout, cursor::Show, terminal::LeaveAlternateScreen)?;
         terminal::disable_raw_mode()?;
         Ok(())
     }
