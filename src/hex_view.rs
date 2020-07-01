@@ -336,6 +336,14 @@ impl HexView {
                     Event::Key(event) if event.code == KeyCode::Esc => {
                         self.state = State::Quitting;
                     }
+                    Event::Key(event) if event.code == KeyCode::Char('l') => {
+                        let max_bytes = self.data.len();
+                        let bytes_per_line = self.bytes_per_line;
+                        self.selection.map_selections(|region| {
+                            region.simple_move(Direction::Right, bytes_per_line, max_bytes)
+                        });
+                        self.draw(stdout)?;
+                    }
                     _ => {}
                 },
             }

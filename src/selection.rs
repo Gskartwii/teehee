@@ -1,8 +1,11 @@
+use std::cmp;
 use std::default::Default;
 use xi_rope::{RopeDelta, Transformer};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Selection {
+    // INVARIANT: regions should be sorted by starting points
+    // INVARIANT: regions should not overlap
     regions: Vec<SelRegion>,
     main_selection: usize,
 }
@@ -55,29 +58,33 @@ impl Selection {
         &self.regions[first..last]
     }
 
-    pub fn apply_delta(&self, delta: &RopeDelta) -> Selection {
-        let mut result = Selection::new();
+    pub fn apply_delta(&mut self, delta: &RopeDelta) {
         let mut transformer = Transformer::new(delta);
-        let mut new_main_sel = 0;
-
-        for (i, region) in self.regions.iter().enumerate() {
+        self.map_selections(|region| {
             let mut new_region = SelRegion::new(
                 transformer.transform(region.start, true),
                 transformer.transform(region.end, true),
             );
             new_region.caret_pos = region.caret_pos;
-            if result.regions.len() == 0 || !result.regions.last().unwrap().overlaps(&new_region) {
-                result.regions.push(new_region);
-            }
-            if i == self.main_selection {
-                new_main_sel = result.regions.len() - 1;
-            }
-        }
-        result
+            new_region
+        })
     }
 
-    pub fn map_selections(&mut self, f: impl FnMut(SelRegion) -> SelRegion) {
-        self.regions = self.regions.iter().copied().map(f).collect();
+    pub fn map_selections(&mut self, mut f: impl FnMut(SelRegion) -> SelRegion) {
+        let mut regions_out: Vec<SelRegion> = vec![];
+        let mut new_main_sel = 0;
+        for (i, region) in self.regions.iter().copied().enumerate() {
+            let new_region = f(region);
+
+            if regions_out.len() == 0 || !regions_out.last().unwrap().overlaps(&new_region) {
+                regions_out.push(new_region);
+            }
+            if i == self.main_selection {
+                new_main_sel = regions_out.len() - 1;
+            }
+        }
+        self.regions = regions_out;
+        self.main_selection = new_main_sel;
     }
 }
 
@@ -102,6 +109,14 @@ impl Default for SelRegion {
     }
 }
 
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum Direction {
+    Up,
+    Down,
+    Left,
+    Right,
+}
+
 impl SelRegion {
     pub fn new(start: usize, end: usize) -> Self {
         SelRegion {
@@ -120,5 +135,21 @@ impl SelRegion {
 
     pub fn overlaps(&self, other: &SelRegion) -> bool {
         self.end > other.start
+    }
+
+    pub fn simple_move(
+        &self,
+        direction: Direction,
+        bytes_per_line: usize,
+        max_size: usize,
+    ) -> SelRegion {
+        let old_caret = self.caret();
+        let caret_location = match direction {
+            Direction::Up => cmp::max(0, old_caret as isize - bytes_per_line as isize) as usize,
+            Direction::Down => cmp::min(max_size, old_caret + bytes_per_line),
+            Direction::Left => cmp::max(0, old_caret as isize - 1) as usize,
+            Direction::Right => cmp::min(max_size, old_caret + 1),
+        };
+        SelRegion::new(caret_location, caret_location + 1)
     }
 }
