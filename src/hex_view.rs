@@ -320,11 +320,9 @@ impl HexView {
                         .with_end_style(base_style);
                 }
                 if selected_regions[0].max() == i {
-                    command_stack.pop();
-                    selected_regions = &selected_regions[1..];
                     mark_commands[normalized] = mark_commands[normalized]
                         .clone()
-                        .with_end_style(command_stack.last().unwrap().clone());
+                        .with_end_style(command_stack[command_stack.len() - 2].clone());
                 }
             }
 
@@ -338,6 +336,12 @@ impl HexView {
                 mark_commands[normalized] = mark_commands[normalized]
                     .clone()
                     .with_end_style(self.default_style());
+            }
+
+            if !selected_regions.is_empty() && selected_regions[0].max() == i {
+                // Must be popped after line config
+                command_stack.pop();
+                selected_regions = &selected_regions[1..];
             }
         }
 
