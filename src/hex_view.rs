@@ -10,7 +10,7 @@ use crossterm::{
 };
 
 use super::selection::*;
-use std::io::{stdout, Write};
+use std::io::Write;
 
 const VERTICAL: &str = "│";
 
@@ -168,16 +168,13 @@ impl HexView {
         stdout: &mut impl Write,
         styled_bytes: impl IntoIterator<Item = (u8, StylingCommand)>,
     ) -> Result<()> {
-        let bytes_per_line = self.bytes_per_line;
-        let hex_digits_in_offset = self.hex_digits_in_offset();
-
         for (byte, style_cmd) in styled_bytes.into_iter() {
             if let Some(start_cmd) = style_cmd.start_style() {
-                queue_style(stdout, start_cmd);
+                queue_style(stdout, start_cmd)?;
             }
             queue!(stdout, style::Print(format!("{}", ByteAsciiRepr(byte))))?;
             if let Some(end_cmd) = style_cmd.end_style() {
-                queue_style(stdout, end_cmd);
+                queue_style(stdout, end_cmd)?;
             }
         }
         Ok(())
