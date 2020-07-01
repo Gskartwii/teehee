@@ -65,18 +65,20 @@ impl Selection {
                 transformer.transform(region.caret, true),
                 transformer.transform(region.tail, true),
             );
-            new_region
+            vec![new_region]
         })
     }
 
-    pub fn map_selections(&mut self, mut f: impl FnMut(SelRegion) -> SelRegion) {
+    pub fn map_selections(&mut self, mut f: impl FnMut(SelRegion) -> Vec<SelRegion>) {
         let mut regions_out: Vec<SelRegion> = vec![];
         let mut new_main_sel = 0;
         for (i, region) in self.regions.iter().copied().enumerate() {
-            let new_region = f(region);
-
-            if regions_out.len() == 0 || !regions_out.last().unwrap().overlaps(&new_region) {
-                regions_out.push(new_region);
+            for new_region in f(region) {
+                if regions_out.len() == 0 || !regions_out.last().unwrap().overlaps(&new_region) {
+                    regions_out.push(new_region);
+                } else if let Some(last) = regions_out.pop() {
+                    regions_out.push(last.merge(&new_region));
+                }
             }
             if i == self.main_selection {
                 new_main_sel = regions_out.len() - 1;
@@ -188,5 +190,33 @@ impl SelRegion {
             Direction::Right => cmp::min(max_size - 1, old_caret + 1),
         };
         SelRegion::new(caret_location, self.tail)
+    }
+
+    pub fn forward(&self) -> bool {
+        self.caret >= self.tail
+    }
+
+    pub fn backward(&self) -> bool {
+        self.caret <= self.tail
+    }
+
+    pub fn merge(&self, other: &SelRegion) -> SelRegion {
+        let both_forward = self.forward() && other.forward();
+        let both_backward = self.backward() && other.backward();
+        match (both_forward, both_backward) {
+            (true, true) => {
+                assert_eq!(self, other, "Can't merge disjoint cursor selections");
+                *self
+            }
+            (true, false) => SelRegion::new(
+                cmp::max(self.caret, other.caret),
+                cmp::min(self.tail, other.tail),
+            ),
+            (false, true) => SelRegion::new(
+                cmp::min(self.caret, other.caret),
+                cmp::max(self.tail, other.tail),
+            ),
+            _ => panic!("Can't merge selections going in different directions"),
+        }
     }
 }

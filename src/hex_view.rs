@@ -18,6 +18,8 @@ const VERTICAL: &str = "│";
 enum State {
     Quitting,
     Normal,
+    JumpTo { extend: bool },
+    Split,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -361,6 +363,36 @@ impl HexView {
         Ok(())
     }
 
+    fn handle_event_default(&mut self, stdout: &mut impl Write, event: Event) -> Result<()> {
+        match event {
+            Event::Resize(x, y) => {
+                self.size = (x, y);
+                self.draw(stdout)?;
+                Ok(())
+            }
+            _ => Ok(()),
+        }
+    }
+
+    fn map_selections(&mut self, mut f: impl FnMut(SelRegion) -> Vec<SelRegion>) -> HashSet<u16> {
+        let mut invalidated_ranges = Vec::new();
+        self.selection.map_selections(|region| {
+            invalidated_ranges.push(region.min()..=region.max());
+            let new = f(region);
+            for new_reg in new.iter() {
+                invalidated_ranges.push(new_reg.min()..=new_reg.max());
+            }
+            new
+        });
+        let mut invalidated_rows = HashSet::new();
+        for offset in invalidated_ranges.into_iter().flatten() {
+            if let Some(invalidated_row) = self.offset_to_row(offset) {
+                invalidated_rows.insert(invalidated_row);
+            }
+        }
+        invalidated_rows
+    }
+
     pub fn run_event_loop(mut self, stdout: &mut impl Write) -> Result<()> {
         execute!(stdout, terminal::EnterAlternateScreen, cursor::Hide)?;
 
@@ -371,47 +403,64 @@ impl HexView {
             match self.state {
                 State::Quitting => break,
                 State::Normal => match event::read()? {
-                    Event::Resize(x, y) => {
-                        self.size = (x, y);
-                        self.draw(stdout)?;
-                    }
                     Event::Key(event) if event.code == KeyCode::Esc => {
                         self.state = State::Quitting;
                     }
                     Event::Key(KeyEvent { code, modifiers }) if key_direction(code).is_some() => {
                         let max_bytes = self.data.len();
                         let bytes_per_line = self.bytes_per_line;
-                        let mut invalidated_ranges = Vec::new();
-                        let is_extend = modifiers.contains(KeyModifiers::SHIFT);
+                        let is_extend = modifiers == KeyModifiers::SHIFT;
+                        let invalidated_rows = if is_extend {
+                            self.map_selections(|region| {
+                                vec![region.simple_extend(
+                                    key_direction(code).unwrap(),
+                                    bytes_per_line,
+                                    max_bytes,
+                                )]
+                            })
+                        } else {
+                            self.map_selections(|region| {
+                                vec![region.simple_move(
+                                    key_direction(code).unwrap(),
+                                    bytes_per_line,
+                                    max_bytes,
+                                )]
+                            })
+                        };
 
-                        self.selection.map_selections(|region| {
-                            invalidated_ranges.push(region.min()..=region.max());
-                            let new = if is_extend {
-                                region.simple_extend(
-                                    key_direction(code).unwrap(),
-                                    bytes_per_line,
-                                    max_bytes,
-                                )
-                            } else {
-                                region.simple_move(
-                                    key_direction(code).unwrap(),
-                                    bytes_per_line,
-                                    max_bytes,
-                                )
-                            };
-                            invalidated_ranges.push(new.min()..=new.max());
-                            dbg!(new)
-                        });
-                        let mut invalidated_rows = HashSet::new();
-                        for offset in invalidated_ranges.into_iter().flatten() {
-                            if let Some(invalidated_row) = self.offset_to_row(offset) {
-                                invalidated_rows.insert(invalidated_row);
-                            }
-                        }
                         self.draw_rows(stdout, &invalidated_rows)?;
                     }
-                    _ => {}
+                    Event::Key(KeyEvent {
+                        code: KeyCode::Char('s'),
+                        modifiers,
+                    }) if modifiers == KeyModifiers::ALT => {
+                        self.state = State::Split;
+                    }
+                    evt => self.handle_event_default(stdout, evt)?,
                 },
+                State::Split => match event::read()? {
+                    Event::Key(KeyEvent {
+                        code: KeyCode::Char('b'),
+                        ..
+                    }) => {
+                        let invalidated_rows = self.map_selections(|region| {
+                            (region.min()..=region.max())
+                                .map(|pos| SelRegion::new(pos, pos))
+                                .collect()
+                        });
+
+                        self.draw_rows(stdout, &invalidated_rows)?;
+                        self.state = State::Normal;
+                    }
+                    evt => self.handle_event_default(stdout, evt)?,
+                },
+                /*State::JumpTo{extend} => match event::read()? {
+                    Event::Key(KeyEvent { code, modifiers }) if key_direction(code).is_some() => {
+
+                    },
+                    evt => self.handle_event_default(stdout, evt)?,
+                },*/
+                _ => todo!(),
             }
         }
         execute!(stdout, cursor::Show, terminal::LeaveAlternateScreen)?;
