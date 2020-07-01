@@ -5,7 +5,7 @@ use std::ops::Range;
 
 use crossterm::{
     cursor, event,
-    event::{Event, KeyCode, KeyEvent},
+    event::{Event, KeyCode, KeyEvent, KeyModifiers},
     execute, queue, style, terminal, Result,
 };
 
@@ -77,10 +77,10 @@ impl StylingCommand {
 
 fn key_direction(key_code: KeyCode) -> Option<Direction> {
     match key_code {
-        KeyCode::Char('h') => Some(Direction::Left),
-        KeyCode::Char('j') => Some(Direction::Down),
-        KeyCode::Char('k') => Some(Direction::Up),
-        KeyCode::Char('l') => Some(Direction::Right),
+        KeyCode::Char('h') | KeyCode::Char('H') => Some(Direction::Left),
+        KeyCode::Char('j') | KeyCode::Char('J') => Some(Direction::Down),
+        KeyCode::Char('k') | KeyCode::Char('K') => Some(Direction::Up),
+        KeyCode::Char('l') | KeyCode::Char('L') => Some(Direction::Right),
         _ => None,
     }
 }
@@ -281,20 +281,20 @@ impl HexView {
         for i in visible {
             let normalized = i - start;
             if !selected_regions.is_empty() {
-                if selected_regions[0].start == i {
+                if selected_regions[0].min() == i {
                     command_stack.push(self.selection_style());
                     mark_commands[normalized] = mark_commands[normalized]
                         .clone()
                         .with_start_style(command_stack.last().unwrap().clone());
                 }
-                if selected_regions[0].caret() == i {
+                if selected_regions[0].caret == i {
                     let base_style = command_stack.last().unwrap().clone();
                     mark_commands[normalized] = mark_commands[normalized]
                         .clone()
                         .with_start_style(self.caret_style())
                         .with_end_style(base_style);
                 }
-                if selected_regions[0].end == i + 1 {
+                if selected_regions[0].max() == i {
                     command_stack.pop();
                     selected_regions = &selected_regions[1..];
                     mark_commands[normalized] = mark_commands[normalized]
@@ -378,19 +378,29 @@ impl HexView {
                     Event::Key(event) if event.code == KeyCode::Esc => {
                         self.state = State::Quitting;
                     }
-                    Event::Key(KeyEvent { code, .. }) if key_direction(code).is_some() => {
+                    Event::Key(KeyEvent { code, modifiers }) if key_direction(code).is_some() => {
                         let max_bytes = self.data.len();
                         let bytes_per_line = self.bytes_per_line;
                         let mut invalidated_ranges = Vec::new();
+                        let is_extend = modifiers.contains(KeyModifiers::SHIFT);
+
                         self.selection.map_selections(|region| {
-                            invalidated_ranges.push(region.start..region.end);
-                            let new = region.simple_move(
-                                key_direction(code).unwrap(),
-                                bytes_per_line,
-                                max_bytes,
-                            );
-                            invalidated_ranges.push(new.start..new.end);
-                            new
+                            invalidated_ranges.push(region.min()..=region.max());
+                            let new = if is_extend {
+                                region.simple_extend(
+                                    key_direction(code).unwrap(),
+                                    bytes_per_line,
+                                    max_bytes,
+                                )
+                            } else {
+                                region.simple_move(
+                                    key_direction(code).unwrap(),
+                                    bytes_per_line,
+                                    max_bytes,
+                                )
+                            };
+                            invalidated_ranges.push(new.min()..=new.max());
+                            dbg!(new)
                         });
                         let mut invalidated_rows = HashSet::new();
                         for offset in invalidated_ranges.into_iter().flatten() {

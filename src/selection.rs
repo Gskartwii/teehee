@@ -41,18 +41,18 @@ impl Selection {
     }
 
     fn search(&self, offset: usize) -> usize {
-        if offset > self.regions.last().unwrap().end {
+        if offset > self.regions.last().unwrap().max() {
             return self.regions.len();
         }
         self.regions
-            .binary_search_by(|r| r.end.cmp(&offset))
+            .binary_search_by(|r| r.max().cmp(&offset))
             .unwrap_or_else(std::convert::identity)
     }
 
     pub fn regions_in_range(&self, start: usize, end: usize) -> &[SelRegion] {
         let first = self.search(start);
         let mut last = self.search(end);
-        if last < self.regions.len() && self.regions[last].start <= end {
+        if last < self.regions.len() && self.regions[last].min() <= end {
             last += 1;
         }
         &self.regions[first..last]
@@ -62,10 +62,9 @@ impl Selection {
         let mut transformer = Transformer::new(delta);
         self.map_selections(|region| {
             let mut new_region = SelRegion::new(
-                transformer.transform(region.start, true),
-                transformer.transform(region.end, true),
+                transformer.transform(region.caret, true),
+                transformer.transform(region.tail, true),
             );
-            new_region.caret_pos = region.caret_pos;
             new_region
         })
     }
@@ -88,24 +87,17 @@ impl Selection {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum CaretPosition {
-    Start,
-    End,
-}
-
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct SelRegion {
     // Start of selection, inclusive
-    pub start: usize,
+    pub caret: usize,
     // End of selection, exclusive
-    pub end: usize,
-    pub caret_pos: CaretPosition,
+    pub tail: usize,
 }
 
 impl Default for SelRegion {
     fn default() -> SelRegion {
-        SelRegion::new(0, 1)
+        SelRegion::new(0, 0)
     }
 }
 
@@ -118,23 +110,20 @@ pub enum Direction {
 }
 
 impl SelRegion {
-    pub fn new(start: usize, end: usize) -> Self {
-        SelRegion {
-            start,
-            end,
-            caret_pos: CaretPosition::Start,
-        }
+    pub fn new(caret: usize, tail: usize) -> Self {
+        SelRegion { caret, tail }
     }
 
-    pub fn caret(&self) -> usize {
-        match self.caret_pos {
-            CaretPosition::Start => self.start,
-            CaretPosition::End => self.end,
-        }
+    pub fn max(&self) -> usize {
+        cmp::max(self.caret, self.tail)
+    }
+
+    pub fn min(&self) -> usize {
+        cmp::min(self.caret, self.tail)
     }
 
     pub fn overlaps(&self, other: &SelRegion) -> bool {
-        self.end > other.start
+        self.max() >= other.min()
     }
 
     pub fn simple_move(
@@ -143,7 +132,7 @@ impl SelRegion {
         bytes_per_line: usize,
         max_size: usize,
     ) -> SelRegion {
-        let old_caret = self.caret();
+        let old_caret = self.caret;
         let caret_location = match direction {
             Direction::Up => {
                 let new_pos = old_caret as isize - bytes_per_line as isize;
@@ -166,6 +155,38 @@ impl SelRegion {
             Direction::Left => cmp::max(0, old_caret as isize - 1) as usize,
             Direction::Right => cmp::min(max_size, old_caret + 1),
         };
-        SelRegion::new(caret_location, caret_location + 1)
+        SelRegion::new(caret_location, caret_location)
+    }
+
+    pub fn simple_extend(
+        &self,
+        direction: Direction,
+        bytes_per_line: usize,
+        max_size: usize,
+    ) -> SelRegion {
+        let old_caret = self.caret;
+        let caret_location = match direction {
+            Direction::Up => {
+                let new_pos = old_caret as isize - bytes_per_line as isize;
+                let is_oob = new_pos < 0;
+                if is_oob {
+                    old_caret
+                } else {
+                    new_pos as usize
+                }
+            }
+            Direction::Down => {
+                let new_pos = old_caret + bytes_per_line;
+                let is_oob = new_pos > max_size;
+                if is_oob {
+                    old_caret
+                } else {
+                    new_pos
+                }
+            }
+            Direction::Left => cmp::max(0, old_caret as isize - 1) as usize,
+            Direction::Right => cmp::min(max_size, old_caret + 1),
+        };
+        SelRegion::new(caret_location, self.tail)
     }
 }
