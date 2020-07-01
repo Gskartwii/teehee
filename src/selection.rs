@@ -163,15 +163,7 @@ impl SelRegion {
                     new_pos as usize
                 }
             }
-            Direction::Down => {
-                let new_pos = old_caret + bytes_per_line;
-                let is_oob = new_pos >= max_size;
-                if is_oob {
-                    old_caret
-                } else {
-                    new_pos
-                }
-            }
+            Direction::Down => cmp::min(max_size - 1, old_caret + bytes_per_line),
             Direction::Left => cmp::max(0, old_caret as isize - 1) as usize,
             Direction::Right => cmp::min(max_size - 1, old_caret + 1),
         };
@@ -195,15 +187,7 @@ impl SelRegion {
                     new_pos as usize
                 }
             }
-            Direction::Down => {
-                let new_pos = old_caret + bytes_per_line;
-                let is_oob = new_pos >= max_size;
-                if is_oob {
-                    old_caret
-                } else {
-                    new_pos
-                }
-            }
+            Direction::Down => cmp::min(max_size - 1, old_caret + bytes_per_line),
             Direction::Left => cmp::max(0, old_caret as isize - 1) as usize,
             Direction::Right => cmp::min(max_size - 1, old_caret + 1),
         };
