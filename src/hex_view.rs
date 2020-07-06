@@ -6,8 +6,9 @@ use std::ops::Range;
 use crossterm::{
     cursor, event,
     event::{Event, KeyCode, KeyEvent, KeyModifiers},
-    execute, queue, style, terminal, Result,
-    style::{StyledContent, Color},
+    execute, queue, style,
+    style::{Color, StyledContent},
+    terminal, Result,
 };
 
 use super::selection::*;
@@ -27,13 +28,13 @@ enum State {
 
 impl State {
     fn name(&self) -> &'static str {
-		match self {
-    		State::Quitting => "QUIT",
-    		State::Normal => "NORMAL",
-    		State::JumpTo{extend: true} => "EXTEND",
-    		State::JumpTo{extend: false} => "JUMP",
-    		State::Split => "SPLIT",
-		}
+        match self {
+            State::Quitting => "QUIT",
+            State::Normal => "NORMAL",
+            State::JumpTo { extend: true } => "EXTEND",
+            State::JumpTo { extend: false } => "JUMP",
+            State::Split => "SPLIT",
+        }
     }
 }
 
@@ -241,6 +242,7 @@ impl HexView {
         queue!(
             stdout,
             cursor::MoveTo(0, row_num),
+            terminal::Clear(terminal::ClearType::CurrentLine),
             style::Print(" ".to_string()), // Padding
         )?;
         self.draw_offset(stdout, offset, digits_in_offset)?;
@@ -268,7 +270,7 @@ impl HexView {
         self.start_offset
             ..cmp::min(
                 self.data.len(),
-                self.start_offset + self.size.1 as usize * self.bytes_per_line,
+                self.start_offset + (self.size.1 - 1) as usize * self.bytes_per_line,
             )
     }
 
@@ -299,10 +301,15 @@ impl HexView {
 
     fn mark_commands(&self, visible: Range<usize>) -> Vec<StylingCommand> {
         let mut mark_commands = vec![StylingCommand::None; visible.len()];
-        let mut command_stack = vec![self.default_style()];
         let mut selected_regions = self.selection.regions_in_range(visible.start, visible.end);
-
+        let mut command_stack = vec![self.default_style()];
         let start = visible.start;
+
+        // Add to command stack those commands that being out of bounds
+        if !selected_regions.is_empty() && selected_regions[0].min() < start {
+            command_stack.push(self.selection_style());
+        }
+
         for i in visible {
             let normalized = i - start;
             if !selected_regions.is_empty() {
@@ -355,23 +362,24 @@ impl HexView {
             terminal::Clear(terminal::ClearType::CurrentLine),
             style::PrintStyledContent(
                 style::style(format!(" {} ", self.state.name()))
-                .with(Color::AnsiValue(16))
-                .on(Color::DarkYellow)
+                    .with(Color::AnsiValue(16))
+                    .on(Color::DarkYellow)
             ),
             style::PrintStyledContent(
                 style::style(RIGHTARROW)
-                .with(Color::DarkYellow)
-                .on(Color::White)
+                    .with(Color::DarkYellow)
+                    .on(Color::White)
             ),
             style::PrintStyledContent(
-                style::style(format!(" {} sels ({}) ", self.selection.len(), self.selection.main_selection + 1))
+                style::style(format!(
+                    " {} sels ({}) ",
+                    self.selection.len(),
+                    self.selection.main_selection + 1
+                ))
                 .with(Color::AnsiValue(16))
                 .on(Color::White)
             ),
-            style::PrintStyledContent(
-                style::style(RIGHTARROW)
-                .with(Color::White)
-            )
+            style::PrintStyledContent(style::style(RIGHTARROW).with(Color::White))
         )?;
         Ok(())
     }
@@ -379,18 +387,23 @@ impl HexView {
     fn draw_rows(&self, stdout: &mut impl Write, invalidated_rows: &HashSet<u16>) -> Result<()> {
         let digits_in_offset = self.hex_digits_in_offset();
         let visible_bytes = self.visible_bytes();
-        let max_bytes = visible_bytes.len();
+        let start_index = visible_bytes.start;
+        let end_index = visible_bytes.end;
+        let max_bytes = end_index - start_index;
         let mark_commands = self.mark_commands(visible_bytes.clone());
 
         for i in visible_bytes.step_by(self.bytes_per_line) {
             if !invalidated_rows.contains(&self.offset_to_row(i).unwrap()) {
                 continue;
             }
+
+            let normalized_i = i - start_index;
             self.draw_row(
                 stdout,
                 i,
                 digits_in_offset,
-                &mark_commands[i..std::cmp::min(max_bytes, i + self.bytes_per_line)],
+                &mark_commands
+                    [normalized_i..std::cmp::min(max_bytes, normalized_i + self.bytes_per_line)],
             )?;
         }
 
@@ -401,15 +414,19 @@ impl HexView {
         queue!(stdout, terminal::Clear(terminal::ClearType::All))?;
         let digits_in_offset = self.hex_digits_in_offset();
         let visible_bytes = self.visible_bytes();
-        let max_bytes = visible_bytes.len();
+        let start_index = visible_bytes.start;
+        let end_index = visible_bytes.end;
+        let max_bytes = end_index - start_index;
         let mark_commands = self.mark_commands(visible_bytes.clone());
 
         for i in visible_bytes.step_by(self.bytes_per_line) {
+            let normalized_i = i - start_index;
             self.draw_row(
                 stdout,
                 i,
                 digits_in_offset,
-                &mark_commands[i..std::cmp::min(max_bytes, i + self.bytes_per_line)],
+                &mark_commands
+                    [normalized_i..std::cmp::min(max_bytes, normalized_i + self.bytes_per_line)],
             )?;
         }
 
@@ -448,6 +465,51 @@ impl HexView {
         invalidated_rows
     }
 
+    fn scroll_down(&mut self, stdout: &mut impl Write, line_count: usize) -> Result<()> {
+        self.start_offset += 0x10 * line_count;
+
+        if line_count > (self.size.1 - 1) as usize {
+            self.draw(stdout)
+        } else {
+            queue!(stdout, terminal::ScrollUp(line_count as u16))?;
+            let invalidated_rows =
+                (self.size.1 - 1 - line_count as u16..=self.size.1 - 2).collect();
+            self.draw_rows(stdout, &invalidated_rows) // -1 is statusline
+        }
+    }
+    fn scroll_up(&mut self, stdout: &mut impl Write, line_count: usize) -> Result<()> {
+        self.start_offset -= 0x10 * line_count;
+
+        if line_count > (self.size.1 - 1) as usize {
+            self.draw(stdout)
+        } else {
+            queue!(stdout, terminal::ScrollDown(line_count as u16))?;
+            let invalidated_rows = (0..line_count as u16).collect();
+            self.draw_rows(stdout, &invalidated_rows) // -1 is statusline
+        }
+    }
+
+    fn maybe_update_offset(&mut self, stdout: &mut impl Write) -> Result<()> {
+        let main_cursor_offset = self.selection.main_cursor_offset();
+        let visible_bytes = self.visible_bytes();
+        let delta = if main_cursor_offset < visible_bytes.start {
+            main_cursor_offset as isize - visible_bytes.start as isize
+        } else if main_cursor_offset >= visible_bytes.end {
+            main_cursor_offset as isize - (visible_bytes.end - 1) as isize
+        } else {
+            return Ok(());
+        };
+        if delta < 0 {
+            let line_delta =
+                (delta - self.bytes_per_line as isize + 1) / self.bytes_per_line as isize;
+            self.scroll_up(stdout, line_delta.abs() as usize)
+        } else {
+            let line_delta =
+                (delta + self.bytes_per_line as isize - 1) / self.bytes_per_line as isize;
+            self.scroll_down(stdout, line_delta as usize)
+        }
+    }
+
     pub fn run_event_loop(mut self, stdout: &mut impl Write) -> Result<()> {
         execute!(stdout, terminal::EnterAlternateScreen, cursor::Hide)?;
 
@@ -465,25 +527,19 @@ impl HexView {
                         let max_bytes = self.data.len();
                         let bytes_per_line = self.bytes_per_line;
                         let is_extend = modifiers == KeyModifiers::SHIFT;
+                        let direction = key_direction(code).unwrap();
                         let invalidated_rows = if is_extend {
                             self.map_selections(|region| {
-                                vec![region.simple_extend(
-                                    key_direction(code).unwrap(),
-                                    bytes_per_line,
-                                    max_bytes,
-                                )]
+                                vec![region.simple_extend(direction, bytes_per_line, max_bytes)]
                             })
                         } else {
                             self.map_selections(|region| {
-                                vec![region.simple_move(
-                                    key_direction(code).unwrap(),
-                                    bytes_per_line,
-                                    max_bytes,
-                                )]
+                                vec![region.simple_move(direction, bytes_per_line, max_bytes)]
                             })
                         };
 
                         self.draw_rows(stdout, &invalidated_rows)?;
+                        self.maybe_update_offset(stdout)?;
                     }
                     Event::Key(KeyEvent {
                         code: KeyCode::Char('s'),
@@ -493,11 +549,9 @@ impl HexView {
                     }
                     Event::Key(KeyEvent {
                         code: KeyCode::Char(ch),
-                        modifiers,
+                        ..
                     }) if ch == 'g' || ch == 'G' => {
-                        self.state = State::JumpTo{
-                            extend: ch == 'G',
-                        };
+                        self.state = State::JumpTo { extend: ch == 'G' };
                     }
                     evt => self.handle_event_default(stdout, evt)?,
                 },
@@ -520,24 +574,29 @@ impl HexView {
                     Event::Key(_) => self.state = State::Normal,
                     evt => self.handle_event_default(stdout, evt)?,
                 },
-                State::JumpTo{extend} => match event::read()? {
+                State::JumpTo { extend } => match event::read()? {
                     Event::Key(KeyEvent { code, .. }) if key_direction(code).is_some() => {
                         let direction = key_direction(code).unwrap();
                         let max_bytes = self.data.len();
                         let bytes_per_line = self.bytes_per_line;
-						let invalidated_rows = if extend {
-    						self.map_selections(|region| {
-    							vec![region.extend_to_boundary(direction, bytes_per_line, max_bytes)]
-    						})
-						} else {
-    						self.map_selections(|region| {
-								vec![region.jump_to_boundary(direction, bytes_per_line, max_bytes)]
-    						})
-						};
+                        let invalidated_rows = if extend {
+                            self.map_selections(|region| {
+                                vec![region.extend_to_boundary(
+                                    direction,
+                                    bytes_per_line,
+                                    max_bytes,
+                                )]
+                            })
+                        } else {
+                            self.map_selections(|region| {
+                                vec![region.jump_to_boundary(direction, bytes_per_line, max_bytes)]
+                            })
+                        };
 
-						self.draw_rows(stdout, &invalidated_rows)?;
-						self.state = State::Normal;
-                    },
+                        self.draw_rows(stdout, &invalidated_rows)?;
+                        self.maybe_update_offset(stdout)?;
+                        self.state = State::Normal;
+                    }
                     Event::Key(_) => self.state = State::Normal,
                     evt => self.handle_event_default(stdout, evt)?,
                 },

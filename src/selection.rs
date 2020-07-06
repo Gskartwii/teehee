@@ -95,6 +95,10 @@ impl Selection {
     pub fn is_empty(&self) -> bool {
         false
     }
+
+    pub fn main_cursor_offset(&self) -> usize {
+        self.regions[self.main_selection].caret
+    }
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -184,13 +188,13 @@ impl SelRegion {
         bytes_per_line: usize,
         max_size: usize,
     ) -> SelRegion {
-		let caret_location = match direction {
-    		Direction::Up => 0,
-    		Direction::Down => max_size - 1,
-    		Direction::Left => self.caret - (self.caret % bytes_per_line),
-    		Direction::Right => self.caret + bytes_per_line - (self.caret % bytes_per_line) - 1,
-		};
-		SelRegion::new(caret_location, caret_location)
+        let caret_location = match direction {
+            Direction::Up => 0,
+            Direction::Down => max_size - 1,
+            Direction::Left => self.caret - (self.caret % bytes_per_line),
+            Direction::Right => self.caret + bytes_per_line - (self.caret % bytes_per_line) - 1,
+        };
+        SelRegion::new(caret_location, caret_location)
     }
 
     pub fn extend_to_boundary(
@@ -199,13 +203,13 @@ impl SelRegion {
         bytes_per_line: usize,
         max_size: usize,
     ) -> SelRegion {
-		let caret_location = match direction {
-    		Direction::Up => 0,
-    		Direction::Down => max_size - 1,
-    		Direction::Left => self.caret - (self.caret % bytes_per_line),
-    		Direction::Right => self.caret + bytes_per_line - (self.caret % bytes_per_line) - 1,
-		};
-		SelRegion::new(caret_location, self.tail)
+        let caret_location = match direction {
+            Direction::Up => 0,
+            Direction::Down => max_size - 1,
+            Direction::Left => self.caret - (self.caret % bytes_per_line),
+            Direction::Right => self.caret + bytes_per_line - (self.caret % bytes_per_line) - 1,
+        };
+        SelRegion::new(caret_location, self.tail)
     }
 
     pub fn forward(&self) -> bool {

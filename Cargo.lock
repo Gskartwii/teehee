@@ -646,6 +646,7 @@ version = "0.1.0"
 dependencies = [
  "crossterm",
  "cursive",
+ "maplit",
  "xi-rope",
 ]
 
