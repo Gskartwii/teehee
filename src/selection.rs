@@ -212,6 +212,10 @@ impl SelRegion {
         SelRegion::new(caret_location, self.tail)
     }
 
+    pub fn swap_caret(&self) -> SelRegion {
+        SelRegion::new(self.tail, self.caret)
+    }
+
     pub fn forward(&self) -> bool {
         self.caret >= self.tail
     }

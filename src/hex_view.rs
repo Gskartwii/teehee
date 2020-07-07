@@ -553,6 +553,15 @@ impl HexView {
                     }) if ch == 'g' || ch == 'G' => {
                         self.state = State::JumpTo { extend: ch == 'G' };
                     }
+                    Event::Key(KeyEvent {
+                        code: KeyCode::Char(';'),
+                        modifiers,
+                    }) if modifiers == KeyModifiers::ALT => {
+                        let invalidated_rows =
+                            self.map_selections(|region| vec![region.swap_caret()]);
+                        self.draw_rows(stdout, &invalidated_rows)?;
+                        self.maybe_update_offset(stdout)?;
+                    }
                     evt => self.handle_event_default(stdout, evt)?,
                 },
                 State::Split => match event::read()? {
