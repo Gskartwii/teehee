@@ -562,6 +562,14 @@ impl HexView {
                         self.draw_rows(stdout, &invalidated_rows)?;
                         self.maybe_update_offset(stdout)?;
                     }
+                    Event::Key(KeyEvent {
+                        code: KeyCode::Char(';'),
+                        ..
+                    }) => {
+                        let invalidated_rows =
+                            self.map_selections(|region| vec![region.collapse()]);
+                        self.draw_rows(stdout, &invalidated_rows)?;
+                    }
                     evt => self.handle_event_default(stdout, evt)?,
                 },
                 State::Split => match event::read()? {

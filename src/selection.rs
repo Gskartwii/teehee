@@ -216,6 +216,10 @@ impl SelRegion {
         SelRegion::new(self.tail, self.caret)
     }
 
+    pub fn collapse(&self) -> SelRegion {
+        SelRegion::new(self.caret, self.caret)
+    }
+
     pub fn forward(&self) -> bool {
         self.caret >= self.tail
     }
