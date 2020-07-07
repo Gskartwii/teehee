@@ -514,8 +514,9 @@ impl HexView {
         execute!(stdout, terminal::EnterAlternateScreen, cursor::Hide)?;
 
         self.draw(stdout)?;
-
         terminal::enable_raw_mode()?;
+        stdout.flush()?;
+
         loop {
             match self.state {
                 State::Quitting => break,
