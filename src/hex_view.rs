@@ -298,6 +298,12 @@ impl HexView {
             priority: Priority::Cursor,
         }
     }
+    fn empty_caret_style(&self) -> PrioritizedStyle {
+        PrioritizedStyle {
+            style: style::ContentStyle::new().background(style::Color::Green),
+            priority: Priority::Cursor,
+        }
+    }
 
     fn mark_commands(&self, visible: Range<usize>) -> Vec<StylingCommand> {
         let mut mark_commands = vec![StylingCommand::None; visible.len()];
@@ -384,7 +390,35 @@ impl HexView {
         Ok(())
     }
 
+    fn draw_empty(&self, stdout: &mut impl Write) -> Result<()> {
+        queue!(
+            stdout,
+            cursor::MoveTo(0, 0),
+            terminal::Clear(terminal::ClearType::All),
+            style::Print(format!(" 0 {} ", VERTICAL)),
+        )?;
+
+        queue_style(stdout, &self.empty_caret_style().style)?;
+        queue!(stdout, style::Print("  "),)?;
+        queue_style(stdout, &self.default_style().style)?;
+
+        queue!(
+            stdout,
+            cursor::MoveTo((1 + 1 + 3 + 3 * self.bytes_per_line - 1) as u16, 0,),
+        )?;
+        self.draw_separator(stdout)?;
+        queue_style(stdout, &self.empty_caret_style().style)?;
+        queue!(stdout, style::Print(" "),)?;
+        queue_style(stdout, &self.default_style().style)?;
+
+        Ok(())
+    }
+
     fn draw_rows(&self, stdout: &mut impl Write, invalidated_rows: &HashSet<u16>) -> Result<()> {
+        if self.data.len() == 0 {
+            self.draw_empty(stdout)?;
+            return Ok(());
+        }
         let digits_in_offset = self.hex_digits_in_offset();
         let visible_bytes = self.visible_bytes();
         let start_index = visible_bytes.start;
@@ -411,7 +445,13 @@ impl HexView {
     }
 
     fn draw(&self, stdout: &mut impl Write) -> Result<()> {
+        if self.data.len() == 0 {
+            self.draw_empty(stdout)?;
+            return Ok(());
+        }
+
         queue!(stdout, terminal::Clear(terminal::ClearType::All))?;
+
         let digits_in_offset = self.hex_digits_in_offset();
         let visible_bytes = self.visible_bytes();
         let start_index = visible_bytes.start;
@@ -495,7 +535,7 @@ impl HexView {
         let delta = if main_cursor_offset < visible_bytes.start {
             main_cursor_offset as isize - visible_bytes.start as isize
         } else if main_cursor_offset >= visible_bytes.end {
-            main_cursor_offset as isize - (visible_bytes.end - 1) as isize
+            main_cursor_offset as isize - (visible_bytes.end as isize - 1)
         } else {
             return Ok(());
         };
