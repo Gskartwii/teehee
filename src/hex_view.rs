@@ -7,11 +7,12 @@ use crossterm::{
     cursor, event,
     event::{Event, KeyCode, KeyEvent, KeyModifiers},
     execute, queue, style,
-    style::{Color, StyledContent},
+    style::Color,
     terminal, Result,
 };
 
 use super::selection::*;
+use super::byte_rope::*;
 use std::io::Write;
 
 const VERTICAL: &str = "│";
@@ -139,7 +140,7 @@ impl fmt::Display for ByteAsciiRepr {
 }
 
 pub struct HexView {
-    data: Vec<u8>,
+    data: Rope,
     size: (u16, u16),
     bytes_per_line: usize,
     start_offset: usize,
@@ -151,7 +152,7 @@ pub struct HexView {
 impl HexView {
     pub fn from_data(data: Vec<u8>) -> HexView {
         HexView {
-            data,
+            data: data.into(),
             bytes_per_line: 0x10,
             start_offset: 0,
             size: terminal::size().unwrap(),
@@ -231,12 +232,12 @@ impl HexView {
     fn draw_row(
         &self,
         stdout: &mut impl Write,
+        bytes: &[u8],
         offset: usize,
         digits_in_offset: usize,
         mark_commands: &[StylingCommand],
     ) -> Result<()> {
         let end = cmp::min(self.data.len(), offset + self.bytes_per_line);
-        let bytes = &self.data[offset..end];
         let row_num = self.offset_to_row(offset).unwrap();
 
         queue!(
@@ -415,7 +416,7 @@ impl HexView {
     }
 
     fn draw_rows(&self, stdout: &mut impl Write, invalidated_rows: &HashSet<u16>) -> Result<()> {
-        if self.data.len() == 0 {
+        if self.data.is_empty() {
             self.draw_empty(stdout)?;
             return Ok(());
         }
@@ -423,6 +424,9 @@ impl HexView {
         let visible_bytes = self.visible_bytes();
         let start_index = visible_bytes.start;
         let end_index = visible_bytes.end;
+
+        let visible_bytes_cow = self.data.slice_to_cow(start_index..end_index);
+
         let max_bytes = end_index - start_index;
         let mark_commands = self.mark_commands(visible_bytes.clone());
 
@@ -432,12 +436,13 @@ impl HexView {
             }
 
             let normalized_i = i - start_index;
+            let normalized_end = std::cmp::min(max_bytes, normalized_i + self.bytes_per_line);
             self.draw_row(
                 stdout,
+                &visible_bytes_cow[normalized_i..normalized_end],
                 i,
                 digits_in_offset,
-                &mark_commands
-                    [normalized_i..std::cmp::min(max_bytes, normalized_i + self.bytes_per_line)],
+                &mark_commands[normalized_i..normalized_end],
             )?;
         }
 
@@ -445,7 +450,7 @@ impl HexView {
     }
 
     fn draw(&self, stdout: &mut impl Write) -> Result<()> {
-        if self.data.len() == 0 {
+        if self.data.is_empty() {
             self.draw_empty(stdout)?;
             return Ok(());
         }
@@ -456,17 +461,20 @@ impl HexView {
         let visible_bytes = self.visible_bytes();
         let start_index = visible_bytes.start;
         let end_index = visible_bytes.end;
+        let visible_bytes_cow = self.data.slice_to_cow(start_index..end_index);
+
         let max_bytes = end_index - start_index;
         let mark_commands = self.mark_commands(visible_bytes.clone());
 
         for i in visible_bytes.step_by(self.bytes_per_line) {
             let normalized_i = i - start_index;
+            let normalized_end = std::cmp::min(max_bytes, normalized_i + self.bytes_per_line);
             self.draw_row(
                 stdout,
+                &visible_bytes_cow[normalized_i..normalized_end],
                 i,
                 digits_in_offset,
-                &mark_commands
-                    [normalized_i..std::cmp::min(max_bytes, normalized_i + self.bytes_per_line)],
+                &mark_commands[normalized_i..normalized_end],
             )?;
         }
 
