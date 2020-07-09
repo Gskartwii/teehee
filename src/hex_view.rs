@@ -11,8 +11,9 @@ use crossterm::{
     terminal, Result,
 };
 
-use super::selection::*;
 use super::byte_rope::*;
+use super::operations::*;
+use super::selection::*;
 use std::io::Write;
 
 const VERTICAL: &str = "│";
@@ -618,6 +619,17 @@ impl HexView {
                         let invalidated_rows =
                             self.map_selections(|region| vec![region.collapse()]);
                         self.draw_rows(stdout, &invalidated_rows)?;
+                    }
+                    Event::Key(KeyEvent {
+                        code: KeyCode::Char('d'),
+                        ..
+                    }) => {
+                        if !self.data.is_empty() {
+                            let delta = deletion(&self.data, &self.selection);
+                            self.selection.apply_delta(&delta);
+                            self.data = self.data.apply_delta(&delta);
+                            self.draw(stdout)?;
+                        }
                     }
                     evt => self.handle_event_default(stdout, evt)?,
                 },

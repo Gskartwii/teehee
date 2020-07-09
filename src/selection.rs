@@ -1,6 +1,8 @@
+use super::byte_rope::RopeDelta;
+
 use std::cmp;
 use std::default::Default;
-use xi_rope::{RopeDelta, Transformer};
+use xi_rope::Transformer;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Selection {
@@ -98,6 +100,10 @@ impl Selection {
 
     pub fn main_cursor_offset(&self) -> usize {
         self.regions[self.main_selection].caret
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &SelRegion> {
+        self.regions.iter()
     }
 }
 
@@ -204,7 +210,10 @@ impl SelRegion {
             Direction::Up => 0,
             Direction::Down => max_size - 1,
             Direction::Left => self.caret - (self.caret % bytes_per_line),
-            Direction::Right => std::cmp::min(self.caret + bytes_per_line - (self.caret % bytes_per_line) - 1, max_size - 1),
+            Direction::Right => std::cmp::min(
+                self.caret + bytes_per_line - (self.caret % bytes_per_line) - 1,
+                max_size - 1,
+            ),
         };
         SelRegion::new(caret_location, caret_location)
     }
@@ -223,7 +232,10 @@ impl SelRegion {
             Direction::Up => 0,
             Direction::Down => max_size - 1,
             Direction::Left => self.caret - (self.caret % bytes_per_line),
-            Direction::Right => std::cmp::min(self.caret + bytes_per_line - (self.caret % bytes_per_line) - 1, max_size - 1),
+            Direction::Right => std::cmp::min(
+                self.caret + bytes_per_line - (self.caret % bytes_per_line) - 1,
+                max_size - 1,
+            ),
         };
         SelRegion::new(caret_location, self.tail)
     }

@@ -92,11 +92,11 @@ impl Metric<RopeInfo> for BaseMetric {
 
 impl Rope {
     pub fn len(&self) -> usize {
-		self.0.len()
+        self.0.len()
     }
 
     pub fn is_empty(&self) -> bool {
-		self.0.len() == 0
+        self.0.len() == 0
     }
 
     pub fn iter_chunks<T: IntervalBounds>(&self, range: T) -> ChunkIter {
@@ -108,22 +108,26 @@ impl Rope {
     }
 
     pub fn slice_to_cow<T: IntervalBounds>(&self, range: T) -> Cow<[u8]> {
-		let mut iter = self.iter_chunks(range);
-		let first = iter.next();
-		let second = iter.next();
+        let mut iter = self.iter_chunks(range);
+        let first = iter.next();
+        let second = iter.next();
 
-		match (first, second) {
-    		(None, None) => Cow::from(vec![]),
-    		(Some(b), None) => Cow::from(b),
-    		(Some(one), Some(two)) => {
-        		let mut result = [one, two].concat();
-        		for chunk in iter {
-            		result.extend_from_slice(chunk);
-        		}
-        		Cow::from(result)
-    		}
-    		_ => unreachable!(),
-		}
+        match (first, second) {
+            (None, None) => Cow::from(vec![]),
+            (Some(b), None) => Cow::from(b),
+            (Some(one), Some(two)) => {
+                let mut result = [one, two].concat();
+                for chunk in iter {
+                    result.extend_from_slice(chunk);
+                }
+                Cow::from(result)
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn apply_delta(&self, delta: &RopeDelta) -> Rope {
+        Rope(delta.apply(&self.0))
     }
 }
 
