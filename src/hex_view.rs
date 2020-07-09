@@ -128,6 +128,11 @@ fn queue_style(stdout: &mut impl Write, style: &style::ContentStyle) -> Result<(
     Ok(())
 }
 
+fn make_padding(len: usize) -> &'static str {
+    debug_assert!(len < 0x40, "can't make padding of len {}", len);
+    &"                                                                "[..len]
+}
+
 struct ByteAsciiRepr(u8);
 impl fmt::Display for ByteAsciiRepr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -202,7 +207,7 @@ impl HexView {
     }
 
     fn draw_separator(&self, stdout: &mut impl Write) -> Result<()> {
-        queue!(stdout, style::Print(format!(" {} ", VERTICAL)))
+        queue!(stdout, style::Print(format!("{} ", VERTICAL)))
     }
 
     fn offset_to_row(&self, offset: usize) -> Option<u16> {
@@ -224,13 +229,15 @@ impl HexView {
         bytes: &[u8],
         offset: usize,
         mark_commands: &[StylingCommand],
+        move_to: bool,
     ) -> Result<()> {
         let row_num = self.offset_to_row(offset).unwrap();
 
+        if move_to {
+            queue!(stdout, cursor::MoveTo(0, row_num),)?;
+        }
         queue!(
             stdout,
-            cursor::MoveTo(0, row_num),
-            terminal::Clear(terminal::ClearType::CurrentLine),
             style::Print(" ".to_string()), // Padding
         )?;
         self.draw_hex_row(
@@ -239,7 +246,9 @@ impl HexView {
         )?;
         queue!(
             stdout,
-            cursor::MoveTo((1 + 3 * self.bytes_per_line - 1) as u16, row_num,),
+            style::Print(make_padding(
+                (self.bytes_per_line - bytes.len()) % self.bytes_per_line * 3
+            )),
         )?;
         self.draw_separator(stdout)?;
         self.draw_ascii_row(
@@ -433,12 +442,17 @@ impl HexView {
 
         let max_bytes = end_index - start_index;
         let mark_commands = self.mark_commands(visible_bytes.clone());
+        let mut last_visible = usize::MAX - 1;
 
         for i in visible_bytes.step_by(self.bytes_per_line) {
             if !invalidated_rows.contains(&self.offset_to_row(i).unwrap()) {
                 continue;
             }
 
+            let can_use_newline = last_visible + 1 == i;
+            if can_use_newline {
+                queue!(stdout, style::Print("\n"))?;
+            }
             let normalized_i = i - start_index;
             let normalized_end = std::cmp::min(max_bytes, normalized_i + self.bytes_per_line);
             self.draw_row(
@@ -446,7 +460,9 @@ impl HexView {
                 &visible_bytes_cow[normalized_i..normalized_end],
                 i,
                 &mark_commands[normalized_i..normalized_end],
+                !can_use_newline,
             )?;
+            last_visible = i;
         }
 
         Ok(())
@@ -458,7 +474,11 @@ impl HexView {
             return Ok(());
         }
 
-        queue!(stdout, terminal::Clear(terminal::ClearType::All))?;
+        queue!(
+            stdout,
+            terminal::Clear(terminal::ClearType::All),
+            cursor::MoveTo(0, 0),
+        )?;
 
         let visible_bytes = self.visible_bytes();
         let start_index = visible_bytes.start;
@@ -476,7 +496,9 @@ impl HexView {
                 &visible_bytes_cow[normalized_i..normalized_end],
                 i,
                 &mark_commands[normalized_i..normalized_end],
+                false,
             )?;
+            queue!(stdout, style::Print("\r\n"),)?;
         }
 
         self.draw_statusline(stdout)?;
