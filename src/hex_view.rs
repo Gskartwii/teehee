@@ -17,7 +17,6 @@ use super::selection::*;
 use std::io::Write;
 
 const VERTICAL: &str = "│";
-const LEFTARROW: &str = "";
 const RIGHTARROW: &str = "";
 
 #[derive(Debug, Clone, Copy)]
@@ -167,13 +166,6 @@ impl HexView {
         self.bytes_per_line = bpl;
     }
 
-    fn hex_digits_in_offset(&self) -> usize {
-        let bits_in_offset = (32 - (self.data.len() as u32).leading_zeros()) as usize;
-        let hex_digits_in_offset = (bits_in_offset + 3) / 4;
-
-        hex_digits_in_offset
-    }
-
     fn draw_hex_row(
         &self,
         stdout: &mut impl Write,
@@ -209,10 +201,6 @@ impl HexView {
         Ok(())
     }
 
-    fn draw_offset(&self, stdout: &mut impl Write, offset: usize, digits: usize) -> Result<()> {
-        queue!(stdout, style::Print(format!("{:>1$x}", offset, digits)))
-    }
-
     fn draw_separator(&self, stdout: &mut impl Write) -> Result<()> {
         queue!(stdout, style::Print(format!(" {} ", VERTICAL)))
     }
@@ -235,10 +223,8 @@ impl HexView {
         stdout: &mut impl Write,
         bytes: &[u8],
         offset: usize,
-        digits_in_offset: usize,
         mark_commands: &[StylingCommand],
     ) -> Result<()> {
-        let end = cmp::min(self.data.len(), offset + self.bytes_per_line);
         let row_num = self.offset_to_row(offset).unwrap();
 
         queue!(
@@ -247,18 +233,13 @@ impl HexView {
             terminal::Clear(terminal::ClearType::CurrentLine),
             style::Print(" ".to_string()), // Padding
         )?;
-        self.draw_offset(stdout, offset, digits_in_offset)?;
-        self.draw_separator(stdout)?;
         self.draw_hex_row(
             stdout,
             bytes.iter().copied().zip(mark_commands.iter().cloned()),
         )?;
         queue!(
             stdout,
-            cursor::MoveTo(
-                (1 + digits_in_offset + 3 + 3 * self.bytes_per_line - 1) as u16,
-                row_num,
-            ),
+            cursor::MoveTo((1 + 3 * self.bytes_per_line - 1) as u16, row_num,),
         )?;
         self.draw_separator(stdout)?;
         self.draw_ascii_row(
@@ -387,8 +368,31 @@ impl HexView {
                 .with(Color::AnsiValue(16))
                 .on(Color::White)
             ),
-            style::PrintStyledContent(style::style(RIGHTARROW).with(Color::White))
+            style::PrintStyledContent(style::style(RIGHTARROW).with(Color::White).on(Color::Blue)),
         )?;
+        if !self.data.is_empty() {
+            queue!(
+                stdout,
+                style::PrintStyledContent(
+                    style::style(format!(
+                        " {:x}/{:x} ",
+                        self.selection.main_cursor_offset(),
+                        self.data.len() - 1,
+                    ))
+                    .with(Color::White)
+                    .on(Color::Blue),
+                ),
+                style::PrintStyledContent(style::style(RIGHTARROW).with(Color::Blue))
+            )?;
+        } else {
+            queue!(
+                stdout,
+                style::PrintStyledContent(
+                    style::style(" empty ").with(Color::White).on(Color::Blue),
+                ),
+                style::PrintStyledContent(style::style(RIGHTARROW).with(Color::Blue))
+            )?;
+        }
         Ok(())
     }
 
@@ -421,7 +425,6 @@ impl HexView {
             self.draw_empty(stdout)?;
             return Ok(());
         }
-        let digits_in_offset = self.hex_digits_in_offset();
         let visible_bytes = self.visible_bytes();
         let start_index = visible_bytes.start;
         let end_index = visible_bytes.end;
@@ -442,7 +445,6 @@ impl HexView {
                 stdout,
                 &visible_bytes_cow[normalized_i..normalized_end],
                 i,
-                digits_in_offset,
                 &mark_commands[normalized_i..normalized_end],
             )?;
         }
@@ -458,7 +460,6 @@ impl HexView {
 
         queue!(stdout, terminal::Clear(terminal::ClearType::All))?;
 
-        let digits_in_offset = self.hex_digits_in_offset();
         let visible_bytes = self.visible_bytes();
         let start_index = visible_bytes.start;
         let end_index = visible_bytes.end;
@@ -474,7 +475,6 @@ impl HexView {
                 stdout,
                 &visible_bytes_cow[normalized_i..normalized_end],
                 i,
-                digits_in_offset,
                 &mark_commands[normalized_i..normalized_end],
             )?;
         }

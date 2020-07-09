@@ -63,8 +63,8 @@ impl Selection {
     pub fn apply_delta(&mut self, delta: &RopeDelta) {
         let new_max_len = delta.new_document_len();
         if new_max_len == 0 {
-			self.clear();
-			return;
+            self.clear();
+            return;
         }
 
         let mut transformer = Transformer::new(delta);
