@@ -61,11 +61,17 @@ impl Selection {
     }
 
     pub fn apply_delta(&mut self, delta: &RopeDelta) {
+        let new_max_len = delta.new_document_len();
+        if new_max_len == 0 {
+			self.clear();
+			return;
+        }
+
         let mut transformer = Transformer::new(delta);
         self.map_selections(|region| {
             let new_region = SelRegion::new(
-                transformer.transform(region.caret, true),
-                transformer.transform(region.tail, true),
+                std::cmp::min(new_max_len - 1, transformer.transform(region.caret, true)),
+                std::cmp::min(new_max_len - 1, transformer.transform(region.tail, true)),
             );
             vec![new_region]
         })

@@ -628,6 +628,7 @@ impl HexView {
                             let delta = deletion(&self.data, &self.selection);
                             self.selection.apply_delta(&delta);
                             self.data = self.data.apply_delta(&delta);
+                            self.maybe_update_offset(stdout)?;
                             self.draw(stdout)?;
                         }
                     }
