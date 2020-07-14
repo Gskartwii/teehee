@@ -27,7 +27,7 @@ enum State {
     Normal,
     JumpTo { extend: bool },
     Split,
-    Insert { before: bool },
+    Insert { before: bool, hex: bool },
 }
 
 impl State {
@@ -38,8 +38,22 @@ impl State {
             State::JumpTo { extend: true } => "EXTEND",
             State::JumpTo { extend: false } => "JUMP",
             State::Split => "SPLIT",
-            State::Insert { before: true } => "INSERT",
-            State::Insert { before: false } => "APPEND",
+            State::Insert {
+                before: true,
+                hex: true,
+            } => "INSERT (hex)",
+            State::Insert {
+                before: true,
+                hex: false,
+            } => "INSERT (ascii)",
+            State::Insert {
+                before: false,
+                hex: true,
+            } => "APPEND (hex)",
+            State::Insert {
+                before: false,
+                hex: false,
+            } => "APPEND (ascii)",
         }
     }
 }
@@ -610,6 +624,61 @@ impl HexView {
         Ok(())
     }
 
+    pub fn apply_delta_no_cursor_update(
+        &mut self,
+        stdout: &mut impl Write,
+        delta: &RopeDelta,
+    ) -> Result<()> {
+        self.data = self.data.apply_delta(&delta);
+        self.maybe_update_offset(stdout)?;
+        self.draw(stdout)?;
+        Ok(())
+    }
+
+    fn handle_insert_event_default(&mut self, stdout: &mut impl Write, evt: Event) -> Result<()> {
+        match evt {
+            Event::Key(KeyEvent {
+                code: KeyCode::Char('o'),
+                modifiers,
+            }) if modifiers.contains(KeyModifiers::CONTROL) => {
+                if let State::Insert { hex, before } = self.state {
+                    self.state = State::Insert { hex: !hex, before }
+                } else {
+                    unreachable!();
+                }
+            }
+            Event::Key(KeyEvent {
+                code: KeyCode::Char('n'),
+                modifiers,
+            }) if modifiers.contains(KeyModifiers::CONTROL) => {
+                let inserted_bytes = vec![0];
+                let delta = insert(&self.data, &self.selection, inserted_bytes);
+                self.apply_delta(stdout, &delta)?;
+            }
+            Event::Key(KeyEvent {
+                code: KeyCode::Backspace,
+                ..
+            }) => {
+                let delta = backspace(&self.data, &self.selection);
+                self.apply_delta(stdout, &delta)?;
+            }
+            Event::Key(KeyEvent {
+                code: KeyCode::Delete,
+                ..
+            }) => {
+                let delta = delete_cursor(&self.data, &self.selection);
+                self.apply_delta(stdout, &delta)?;
+            }
+            Event::Key(KeyEvent {
+                code: KeyCode::Esc, ..
+            }) => {
+                self.state = State::Normal;
+            }
+            evt => self.handle_event_default(stdout, evt)?,
+        };
+        Ok(())
+    }
+
     pub fn run_event_loop(mut self, stdout: &mut impl Write) -> Result<()> {
         execute!(stdout, terminal::EnterAlternateScreen, cursor::Hide)?;
 
@@ -686,13 +755,16 @@ impl HexView {
                             }
                         }
                         Event::Key(KeyEvent {
-                            code: KeyCode::Char('i'),
+                            code: KeyCode::Char(ch),
                             ..
-                        }) => {
+                        }) if ch == 'i' || ch == 'I' => {
                             let invalidated_rows =
                                 self.map_selections(|region| vec![region.to_backward()]);
                             self.draw_rows(stdout, &invalidated_rows)?;
-                            self.state = State::Insert { before: true };
+                            self.state = State::Insert {
+                                before: true,
+                                hex: ch == 'i',
+                            };
                         }
                         evt => self.handle_event_default(stdout, evt)?,
                     };
@@ -743,36 +815,93 @@ impl HexView {
                     Event::Key(_) => self.state = State::Normal,
                     evt => self.handle_event_default(stdout, evt)?,
                 },
-                State::Insert { before: _ } => match event::read()? {
+                State::Insert { hex, before } => match event::read()? {
                     Event::Key(KeyEvent {
                         code: KeyCode::Char(ch),
-                        ..
-                    }) => {
+                        modifiers,
+                    }) if !hex && modifiers.is_empty() => {
                         let mut inserted_bytes = vec![0u8; ch.len_utf8()];
                         ch.encode_utf8(&mut inserted_bytes);
+                        // At this point `before` doesn't really matter;
+                        // the cursors will have been moved in normal mode to their
+                        // correct places.
                         let delta = insert(&self.data, &self.selection, inserted_bytes);
                         self.apply_delta(stdout, &delta)?;
                     }
                     Event::Key(KeyEvent {
-                        code: KeyCode::Backspace,
-                        ..
-                    }) => {
-                        let delta = backspace(&self.data, &self.selection);
-                        self.apply_delta(stdout, &delta)?;
+                        code: KeyCode::Char(ch),
+                        modifiers,
+                    }) if ch.is_ascii_hexdigit() && modifiers.is_empty() => {
+                        let inserted = ch.to_digit(16).unwrap() << 4;
+                        let mut inserted_bytes = vec![inserted as u8];
+                        let insertion_delta =
+                            insert(&self.data, &self.selection, inserted_bytes.clone());
+                        self.selection
+                            .apply_delta_offset_carets(&insertion_delta, -1);
+                        self.apply_delta_no_cursor_update(stdout, &insertion_delta)?;
+                        stdout.flush()?;
+
+                        let next_key_event = loop {
+                            match event::read()? {
+                                k @ Event::Key(_) => break k,
+                                evt => self.handle_insert_event_default(stdout, evt)?,
+                            }
+                        };
+                        if let Event::Key(KeyEvent {
+                            code: KeyCode::Char(second_ch),
+                            modifiers,
+                        }) = next_key_event
+                        {
+                            if !second_ch.is_ascii_hexdigit() || !modifiers.is_empty() {
+                                // The partial insertion will have extended our selection in the direction
+                                // of the cursor. Fix this up before doing anything.
+                                let bytes_per_line = self.bytes_per_line;
+                                let max_bytes = self.data.len();
+                                let fixup_direction = if before {
+                                    Direction::Right
+                                } else {
+                                    Direction::Left
+                                };
+
+                                let invalidated_rows = self.map_selections(|region| {
+                                    vec![region.simple_extend(
+                                        fixup_direction,
+                                        bytes_per_line,
+                                        max_bytes,
+                                    )]
+                                });
+                                self.draw_rows(stdout, &invalidated_rows)?;
+
+                                self.handle_insert_event_default(stdout, next_key_event)?;
+                            } else {
+                                inserted_bytes[0] |= second_ch.to_digit(16).unwrap() as u8;
+                                let delta = change(&self.data, &self.selection, inserted_bytes);
+
+                                self.apply_delta(stdout, &delta)?;
+                            }
+                        } else {
+                            // The partial insertion will have extended our selection in the direction
+                            // of the cursor. Fix this up before doing anything.
+                            let bytes_per_line = self.bytes_per_line;
+                            let max_bytes = self.data.len();
+                            let fixup_direction = if before {
+                                Direction::Right
+                            } else {
+                                Direction::Left
+                            };
+
+                            let invalidated_rows = self.map_selections(|region| {
+                                vec![region.simple_extend(
+                                    fixup_direction,
+                                    bytes_per_line,
+                                    max_bytes,
+                                )]
+                            });
+                            self.draw_rows(stdout, &invalidated_rows)?;
+                            self.handle_insert_event_default(stdout, next_key_event)?;
+                        }
                     }
-                    Event::Key(KeyEvent {
-                        code: KeyCode::Delete,
-                        ..
-                    }) => {
-                        let delta = delete_cursor(&self.data, &self.selection);
-                        self.apply_delta(stdout, &delta)?;
-                    }
-                    Event::Key(KeyEvent {
-                        code: KeyCode::Esc, ..
-                    }) => {
-                        self.state = State::Normal;
-                    }
-                    evt => self.handle_event_default(stdout, evt)?,
+                    evt => self.handle_insert_event_default(stdout, evt)?,
                 },
             }
             self.draw_statusline(stdout)?;

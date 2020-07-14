@@ -50,3 +50,14 @@ pub fn insert(base: &Rope, selection: &Selection, text: impl Into<Rope>) -> Rope
 
     builder.build()
 }
+
+pub fn change(base: &Rope, selection: &Selection, text: impl Into<Rope>) -> RopeDelta {
+    let inserted = text.into();
+    let mut builder = DeltaBuilder::new(base.len());
+    for region in selection.iter() {
+        let iv = Interval::new(region.caret, region.caret + 1);
+        builder.replace(iv, inserted.clone().into_node());
+    }
+
+    builder.build()
+}

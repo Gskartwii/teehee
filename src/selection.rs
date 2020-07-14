@@ -77,6 +77,26 @@ impl Selection {
         })
     }
 
+    pub fn apply_delta_offset_carets(&mut self, delta: &RopeDelta, offset: isize) {
+        let new_max_len = delta.new_document_len();
+        if new_max_len == 0 {
+            self.clear();
+            return;
+        }
+
+        let mut transformer = Transformer::new(delta);
+        self.map_selections(|region| {
+            let new_region = SelRegion::new(
+                std::cmp::min(
+                    new_max_len - 1,
+                    (transformer.transform(region.caret, true) as isize + offset) as usize,
+                ),
+                std::cmp::min(new_max_len - 1, transformer.transform(region.tail, true)),
+            );
+            vec![new_region]
+        })
+    }
+
     pub fn map_selections(&mut self, mut f: impl FnMut(SelRegion) -> Vec<SelRegion>) {
         let mut regions_out: Vec<SelRegion> = vec![];
         let mut new_main_sel = 0;
