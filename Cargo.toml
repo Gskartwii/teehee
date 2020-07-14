@@ -7,7 +7,5 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-cursive = "0.15.0"
 crossterm = "0.17.5"
 xi-rope = "0.3.0"
-maplit = "1.0.2"
