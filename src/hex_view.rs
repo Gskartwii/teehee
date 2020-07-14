@@ -240,13 +240,10 @@ impl HexView {
         bytes: &[u8],
         offset: usize,
         mark_commands: &[StylingCommand],
-        move_to: bool,
     ) -> Result<()> {
         let row_num = self.offset_to_row(offset).unwrap();
 
-        if move_to {
-            queue!(stdout, cursor::MoveTo(0, row_num),)?;
-        }
+        queue!(stdout, cursor::MoveTo(0, row_num))?;
         queue!(
             stdout,
             style::Print(" ".to_string()), // Padding
@@ -463,17 +460,12 @@ impl HexView {
 
         let max_bytes = end_index - start_index;
         let mark_commands = self.mark_commands(visible_bytes.clone());
-        let mut last_visible = usize::MAX - 1;
 
         for i in visible_bytes.step_by(self.bytes_per_line) {
             if !invalidated_rows.contains(&self.offset_to_row(i).unwrap()) {
                 continue;
             }
 
-            let can_use_newline = last_visible + 1 == i;
-            if can_use_newline {
-                queue!(stdout, style::Print("\n"))?;
-            }
             let normalized_i = i - start_index;
             let normalized_end = std::cmp::min(max_bytes, normalized_i + self.bytes_per_line);
             self.draw_row(
@@ -481,9 +473,7 @@ impl HexView {
                 &visible_bytes_cow[normalized_i..normalized_end],
                 i,
                 &mark_commands[normalized_i..normalized_end],
-                !can_use_newline,
             )?;
-            last_visible = i;
         }
 
         Ok(())
@@ -514,11 +504,12 @@ impl HexView {
                 &visible_bytes_cow[normalized_i..normalized_end],
                 i,
                 &mark_commands[normalized_i..normalized_end],
-                true,
             )?;
         }
+        queue!(stdout, terminal::Clear(terminal::ClearType::UntilNewLine))?;
 
-        let new_full_rows = (end_index - start_index) / self.bytes_per_line;
+        let new_full_rows =
+            (end_index - start_index + self.bytes_per_line - 1) / self.bytes_per_line;
         if new_full_rows != self.last_visible_rows.get() {
             queue!(stdout, terminal::Clear(terminal::ClearType::FromCursorDown))?;
             self.last_visible_rows.set(new_full_rows);
@@ -611,6 +602,14 @@ impl HexView {
         }
     }
 
+    pub fn apply_delta(&mut self, stdout: &mut impl Write, delta: &RopeDelta) -> Result<()> {
+        self.selection.apply_delta(&delta);
+        self.data = self.data.apply_delta(&delta);
+        self.maybe_update_offset(stdout)?;
+        self.draw(stdout)?;
+        Ok(())
+    }
+
     pub fn run_event_loop(mut self, stdout: &mut impl Write) -> Result<()> {
         execute!(stdout, terminal::EnterAlternateScreen, cursor::Hide)?;
 
@@ -683,16 +682,16 @@ impl HexView {
                         }) => {
                             if !self.data.is_empty() {
                                 let delta = deletion(&self.data, &self.selection);
-                                self.selection.apply_delta(&delta);
-                                self.data = self.data.apply_delta(&delta);
-                                self.maybe_update_offset(stdout)?;
-                                self.draw(stdout)?;
+                                self.apply_delta(stdout, &delta)?;
                             }
                         }
                         Event::Key(KeyEvent {
                             code: KeyCode::Char('i'),
                             ..
                         }) => {
+                            let invalidated_rows =
+                                self.map_selections(|region| vec![region.to_backward()]);
+                            self.draw_rows(stdout, &invalidated_rows)?;
                             self.state = State::Insert { before: true };
                         }
                         evt => self.handle_event_default(stdout, evt)?,
@@ -751,11 +750,22 @@ impl HexView {
                     }) => {
                         let mut inserted_bytes = vec![0u8; ch.len_utf8()];
                         ch.encode_utf8(&mut inserted_bytes);
-                        let delta = insert_before(&self.data, &self.selection, inserted_bytes);
-                        self.selection.apply_delta(&delta);
-                        self.data = self.data.apply_delta(&delta);
-                        self.maybe_update_offset(stdout)?;
-                        self.draw(stdout)?;
+                        let delta = insert(&self.data, &self.selection, inserted_bytes);
+                        self.apply_delta(stdout, &delta)?;
+                    }
+                    Event::Key(KeyEvent {
+                        code: KeyCode::Backspace,
+                        ..
+                    }) => {
+                        let delta = backspace(&self.data, &self.selection);
+                        self.apply_delta(stdout, &delta)?;
+                    }
+                    Event::Key(KeyEvent {
+                        code: KeyCode::Delete,
+                        ..
+                    }) => {
+                        let delta = delete_cursor(&self.data, &self.selection);
+                        self.apply_delta(stdout, &delta)?;
                     }
                     Event::Key(KeyEvent {
                         code: KeyCode::Esc, ..

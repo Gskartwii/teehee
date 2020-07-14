@@ -262,6 +262,10 @@ impl SelRegion {
         self.caret <= self.tail
     }
 
+    pub fn to_backward(&self) -> SelRegion {
+        SelRegion::new(self.min(), self.max())
+    }
+
     pub fn merge(&self, other: &SelRegion) -> SelRegion {
         let both_forward = self.forward() && other.forward();
         let both_backward = self.backward() && other.backward();

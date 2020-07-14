@@ -1,4 +1,4 @@
-use std::io::{BufWriter, stdout};
+use std::io::{stdout, BufWriter};
 use teehee::hex_view::HexView;
 
 const STDOUT_BUF: usize = 8192;

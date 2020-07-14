@@ -14,11 +14,37 @@ pub fn deletion(base: &Rope, selection: &Selection) -> RopeDelta {
     builder.build()
 }
 
-pub fn insert_before(base: &Rope, selection: &Selection, text: impl Into<Rope>) -> RopeDelta {
+pub fn backspace(base: &Rope, selection: &Selection) -> RopeDelta {
+    let mut builder = DeltaBuilder::new(base.len());
+    for region in selection.iter() {
+        if region.caret == 0 {
+            continue;
+        }
+        let iv = Interval::new(region.caret - 1, region.caret);
+        builder.delete(iv);
+    }
+
+    builder.build()
+}
+
+pub fn delete_cursor(base: &Rope, selection: &Selection) -> RopeDelta {
+    let base_len = base.len();
+    let mut builder = DeltaBuilder::new(base_len);
+    for region in selection.iter() {
+        let iv = Interval::new(region.caret, std::cmp::min(base_len, region.caret + 1));
+        if !iv.is_empty() {
+            builder.delete(iv);
+        }
+    }
+
+    builder.build()
+}
+
+pub fn insert(base: &Rope, selection: &Selection, text: impl Into<Rope>) -> RopeDelta {
     let inserted = text.into();
     let mut builder = DeltaBuilder::new(base.len());
     for region in selection.iter() {
-        let iv = Interval::new(region.min(), region.min());
+        let iv = Interval::new(region.caret, region.caret);
         builder.replace(iv, inserted.clone().into_node());
     }
 
