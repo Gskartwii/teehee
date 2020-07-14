@@ -10,6 +10,7 @@ const MAX_LEAF: usize = 1024;
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash, Default)]
 pub struct Bytes(pub Vec<u8>);
+#[derive(Clone)]
 pub struct Rope(Node<RopeInfo>);
 pub type RopeDelta = Delta<RopeInfo>;
 pub type RopeDeltaElement = DeltaElement<RopeInfo>;
@@ -128,6 +129,10 @@ impl Rope {
 
     pub fn apply_delta(&self, delta: &RopeDelta) -> Rope {
         Rope(delta.apply(&self.0))
+    }
+
+    pub fn into_node(self) -> Node<RopeInfo> {
+        self.0
     }
 }
 

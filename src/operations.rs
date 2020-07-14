@@ -13,3 +13,14 @@ pub fn deletion(base: &Rope, selection: &Selection) -> RopeDelta {
 
     builder.build()
 }
+
+pub fn insert_before(base: &Rope, selection: &Selection, text: impl Into<Rope>) -> RopeDelta {
+    let inserted = text.into();
+    let mut builder = DeltaBuilder::new(base.len());
+    for region in selection.iter() {
+        let iv = Interval::new(region.min(), region.min());
+        builder.replace(iv, inserted.clone().into_node());
+    }
+
+    builder.build()
+}

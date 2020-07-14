@@ -1,8 +1,11 @@
-use std::io::stdout;
+use std::io::{BufWriter, stdout};
 use teehee::hex_view::HexView;
 
+const STDOUT_BUF: usize = 8192;
+
 fn main() {
-    let mut stdout = stdout();
+    let stdout = stdout();
+    let mut stdout = BufWriter::with_capacity(STDOUT_BUF, stdout.lock());
     let filename = std::env::args().skip(1).next().expect("Need a filename");
     let contents = std::fs::read(&filename).expect("Couldn't read file");
     let view = HexView::from_data(contents);

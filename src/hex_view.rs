@@ -1,7 +1,9 @@
+use std::cell::Cell;
 use std::cmp;
 use std::collections::HashSet;
 use std::fmt;
 use std::ops::Range;
+use std::time;
 
 use crossterm::{
     cursor, event,
@@ -25,6 +27,7 @@ enum State {
     Normal,
     JumpTo { extend: bool },
     Split,
+    Insert { before: bool },
 }
 
 impl State {
@@ -35,6 +38,8 @@ impl State {
             State::JumpTo { extend: true } => "EXTEND",
             State::JumpTo { extend: false } => "JUMP",
             State::Split => "SPLIT",
+            State::Insert { before: true } => "INSERT",
+            State::Insert { before: false } => "APPEND",
         }
     }
 }
@@ -150,6 +155,9 @@ pub struct HexView {
     bytes_per_line: usize,
     start_offset: usize,
     selection: Selection,
+    last_visible_rows: Cell<usize>,
+
+    last_draw_time: time::Duration,
 
     state: State,
 }
@@ -162,6 +170,9 @@ impl HexView {
             start_offset: 0,
             size: terminal::size().unwrap(),
             selection: Selection::new(),
+            last_visible_rows: Cell::new(0),
+
+            last_draw_time: Default::default(),
 
             state: State::Normal,
         }
@@ -402,29 +413,39 @@ impl HexView {
                 style::PrintStyledContent(style::style(RIGHTARROW).with(Color::Blue))
             )?;
         }
+        queue!(
+            stdout,
+            style::Print(format!(
+                " -- debug: draw time {} ms",
+                self.last_draw_time.as_millis()
+            )),
+        )?;
         Ok(())
     }
 
     fn draw_empty(&self, stdout: &mut impl Write) -> Result<()> {
-        queue!(
-            stdout,
-            cursor::MoveTo(0, 0),
-            terminal::Clear(terminal::ClearType::All),
-            style::Print(format!(" 0 {} ", VERTICAL)),
-        )?;
+        queue!(stdout, cursor::MoveTo(0, 0), style::Print(" ".to_string()),)?;
 
         queue_style(stdout, &self.empty_caret_style().style)?;
-        queue!(stdout, style::Print("  "),)?;
+        queue!(stdout, style::Print("  "))?;
         queue_style(stdout, &self.default_style().style)?;
 
         queue!(
             stdout,
-            cursor::MoveTo((1 + 1 + 3 + 3 * self.bytes_per_line - 1) as u16, 0,),
+            style::Print(make_padding(
+                (self.bytes_per_line - 1) % self.bytes_per_line * 3
+            )),
         )?;
         self.draw_separator(stdout)?;
         queue_style(stdout, &self.empty_caret_style().style)?;
-        queue!(stdout, style::Print(" "),)?;
+        queue!(stdout, style::Print(" "))?;
         queue_style(stdout, &self.default_style().style)?;
+
+        let new_full_rows = 0;
+        if new_full_rows != self.last_visible_rows.get() {
+            queue!(stdout, terminal::Clear(terminal::ClearType::FromCursorDown))?;
+            self.last_visible_rows.set(new_full_rows);
+        }
 
         Ok(())
     }
@@ -468,17 +489,14 @@ impl HexView {
         Ok(())
     }
 
-    fn draw(&self, stdout: &mut impl Write) -> Result<()> {
+    fn draw(&self, stdout: &mut impl Write) -> Result<time::Duration> {
+        let begin = time::Instant::now();
         if self.data.is_empty() {
             self.draw_empty(stdout)?;
-            return Ok(());
+            return Ok(begin.elapsed());
         }
 
-        queue!(
-            stdout,
-            terminal::Clear(terminal::ClearType::All),
-            cursor::MoveTo(0, 0),
-        )?;
+        queue!(stdout, cursor::MoveTo(0, 0))?;
 
         let visible_bytes = self.visible_bytes();
         let start_index = visible_bytes.start;
@@ -496,14 +514,19 @@ impl HexView {
                 &visible_bytes_cow[normalized_i..normalized_end],
                 i,
                 &mark_commands[normalized_i..normalized_end],
-                false,
+                true,
             )?;
-            queue!(stdout, style::Print("\r\n"),)?;
+        }
+
+        let new_full_rows = (end_index - start_index) / self.bytes_per_line;
+        if new_full_rows != self.last_visible_rows.get() {
+            queue!(stdout, terminal::Clear(terminal::ClearType::FromCursorDown))?;
+            self.last_visible_rows.set(new_full_rows);
         }
 
         self.draw_statusline(stdout)?;
 
-        Ok(())
+        Ok(begin.elapsed())
     }
 
     fn handle_event_default(&mut self, stdout: &mut impl Write, event: Event) -> Result<()> {
@@ -540,7 +563,8 @@ impl HexView {
         self.start_offset += 0x10 * line_count;
 
         if line_count > (self.size.1 - 1) as usize {
-            self.draw(stdout)
+            self.draw(stdout)?;
+            Ok(())
         } else {
             queue!(stdout, terminal::ScrollUp(line_count as u16))?;
             let invalidated_rows =
@@ -552,7 +576,8 @@ impl HexView {
         self.start_offset -= 0x10 * line_count;
 
         if line_count > (self.size.1 - 1) as usize {
-            self.draw(stdout)
+            self.draw(stdout)?;
+            Ok(())
         } else {
             queue!(stdout, terminal::ScrollDown(line_count as u16))?;
             let invalidated_rows = (0..line_count as u16).collect();
@@ -561,6 +586,11 @@ impl HexView {
     }
 
     fn maybe_update_offset(&mut self, stdout: &mut impl Write) -> Result<()> {
+        if self.data.is_empty() {
+            self.start_offset = 0;
+            return Ok(());
+        }
+
         let main_cursor_offset = self.selection.main_cursor_offset();
         let visible_bytes = self.visible_bytes();
         let delta = if main_cursor_offset < visible_bytes.start {
@@ -584,78 +614,91 @@ impl HexView {
     pub fn run_event_loop(mut self, stdout: &mut impl Write) -> Result<()> {
         execute!(stdout, terminal::EnterAlternateScreen, cursor::Hide)?;
 
-        self.draw(stdout)?;
+        self.last_draw_time = self.draw(stdout)?;
         terminal::enable_raw_mode()?;
         stdout.flush()?;
 
         loop {
             match self.state {
                 State::Quitting => break,
-                State::Normal => match event::read()? {
-                    Event::Key(event) if event.code == KeyCode::Esc => {
-                        self.state = State::Quitting;
-                    }
-                    Event::Key(KeyEvent { code, modifiers }) if key_direction(code).is_some() => {
-                        let max_bytes = self.data.len();
-                        let bytes_per_line = self.bytes_per_line;
-                        let is_extend = modifiers == KeyModifiers::SHIFT;
-                        let direction = key_direction(code).unwrap();
-                        let invalidated_rows = if is_extend {
-                            self.map_selections(|region| {
-                                vec![region.simple_extend(direction, bytes_per_line, max_bytes)]
-                            })
-                        } else {
-                            self.map_selections(|region| {
-                                vec![region.simple_move(direction, bytes_per_line, max_bytes)]
-                            })
-                        };
-
-                        self.draw_rows(stdout, &invalidated_rows)?;
-                        self.maybe_update_offset(stdout)?;
-                    }
-                    Event::Key(KeyEvent {
-                        code: KeyCode::Char('s'),
-                        modifiers,
-                    }) if modifiers == KeyModifiers::ALT => {
-                        self.state = State::Split;
-                    }
-                    Event::Key(KeyEvent {
-                        code: KeyCode::Char(ch),
-                        ..
-                    }) if ch == 'g' || ch == 'G' => {
-                        self.state = State::JumpTo { extend: ch == 'G' };
-                    }
-                    Event::Key(KeyEvent {
-                        code: KeyCode::Char(';'),
-                        modifiers,
-                    }) if modifiers == KeyModifiers::ALT => {
-                        let invalidated_rows =
-                            self.map_selections(|region| vec![region.swap_caret()]);
-                        self.draw_rows(stdout, &invalidated_rows)?;
-                        self.maybe_update_offset(stdout)?;
-                    }
-                    Event::Key(KeyEvent {
-                        code: KeyCode::Char(';'),
-                        ..
-                    }) => {
-                        let invalidated_rows =
-                            self.map_selections(|region| vec![region.collapse()]);
-                        self.draw_rows(stdout, &invalidated_rows)?;
-                    }
-                    Event::Key(KeyEvent {
-                        code: KeyCode::Char('d'),
-                        ..
-                    }) => {
-                        if !self.data.is_empty() {
-                            let delta = deletion(&self.data, &self.selection);
-                            self.selection.apply_delta(&delta);
-                            self.data = self.data.apply_delta(&delta);
-                            self.maybe_update_offset(stdout)?;
-                            self.draw(stdout)?;
+                State::Normal => {
+                    let evt = event::read()?;
+                    let start = time::Instant::now();
+                    match evt {
+                        Event::Key(event) if event.code == KeyCode::Esc => {
+                            self.state = State::Quitting;
                         }
-                    }
-                    evt => self.handle_event_default(stdout, evt)?,
-                },
+                        Event::Key(KeyEvent { code, modifiers })
+                            if key_direction(code).is_some() =>
+                        {
+                            let max_bytes = self.data.len();
+                            let bytes_per_line = self.bytes_per_line;
+                            let is_extend = modifiers == KeyModifiers::SHIFT;
+                            let direction = key_direction(code).unwrap();
+                            let invalidated_rows = if is_extend {
+                                self.map_selections(|region| {
+                                    vec![region.simple_extend(direction, bytes_per_line, max_bytes)]
+                                })
+                            } else {
+                                self.map_selections(|region| {
+                                    vec![region.simple_move(direction, bytes_per_line, max_bytes)]
+                                })
+                            };
+
+                            self.draw_rows(stdout, &invalidated_rows)?;
+                            self.maybe_update_offset(stdout)?;
+                        }
+                        Event::Key(KeyEvent {
+                            code: KeyCode::Char('s'),
+                            modifiers,
+                        }) if modifiers == KeyModifiers::ALT => {
+                            self.state = State::Split;
+                        }
+                        Event::Key(KeyEvent {
+                            code: KeyCode::Char(ch),
+                            ..
+                        }) if ch == 'g' || ch == 'G' => {
+                            self.state = State::JumpTo { extend: ch == 'G' };
+                        }
+                        Event::Key(KeyEvent {
+                            code: KeyCode::Char(';'),
+                            modifiers,
+                        }) if modifiers == KeyModifiers::ALT => {
+                            let invalidated_rows =
+                                self.map_selections(|region| vec![region.swap_caret()]);
+                            self.draw_rows(stdout, &invalidated_rows)?;
+                            self.maybe_update_offset(stdout)?;
+                        }
+                        Event::Key(KeyEvent {
+                            code: KeyCode::Char(';'),
+                            ..
+                        }) => {
+                            let invalidated_rows =
+                                self.map_selections(|region| vec![region.collapse()]);
+                            self.draw_rows(stdout, &invalidated_rows)?;
+                        }
+                        Event::Key(KeyEvent {
+                            code: KeyCode::Char('d'),
+                            ..
+                        }) => {
+                            if !self.data.is_empty() {
+                                let delta = deletion(&self.data, &self.selection);
+                                self.selection.apply_delta(&delta);
+                                self.data = self.data.apply_delta(&delta);
+                                self.maybe_update_offset(stdout)?;
+                                self.draw(stdout)?;
+                            }
+                        }
+                        Event::Key(KeyEvent {
+                            code: KeyCode::Char('i'),
+                            ..
+                        }) => {
+                            self.state = State::Insert { before: true };
+                        }
+                        evt => self.handle_event_default(stdout, evt)?,
+                    };
+                    self.last_draw_time = start.elapsed();
+                }
                 State::Split => match event::read()? {
                     Event::Key(KeyEvent { code, .. }) if split_width(code).is_some() => {
                         let width = split_width(code).unwrap();
@@ -699,6 +742,26 @@ impl HexView {
                         self.state = State::Normal;
                     }
                     Event::Key(_) => self.state = State::Normal,
+                    evt => self.handle_event_default(stdout, evt)?,
+                },
+                State::Insert { before: _ } => match event::read()? {
+                    Event::Key(KeyEvent {
+                        code: KeyCode::Char(ch),
+                        ..
+                    }) => {
+                        let mut inserted_bytes = vec![0u8; ch.len_utf8()];
+                        ch.encode_utf8(&mut inserted_bytes);
+                        let delta = insert_before(&self.data, &self.selection, inserted_bytes);
+                        self.selection.apply_delta(&delta);
+                        self.data = self.data.apply_delta(&delta);
+                        self.maybe_update_offset(stdout)?;
+                        self.draw(stdout)?;
+                    }
+                    Event::Key(KeyEvent {
+                        code: KeyCode::Esc, ..
+                    }) => {
+                        self.state = State::Normal;
+                    }
                     evt => self.handle_event_default(stdout, evt)?,
                 },
             }
