@@ -38,3 +38,6 @@ Teehee supports multiple selections.
     * `q`: 8 bytes (Qword)
     * `o`: 16 bytes (Oword)
 * `d` to delete selected data from buffer
+* `i` to enter insert mode at the beginning of selections (`I` to insert ascii instead of hex)
+    * `<c-n>` to insert a null byte in ascii mode
+    * `<c-o>` to switch between ascii and hex inserting
