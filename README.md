@@ -42,3 +42,5 @@ Teehee supports multiple selections.
     * `a` instead of `i` to enter append mode instead
     * `<c-n>` to insert a null byte in ascii mode
     * `<c-o>` to switch between ascii and hex inserting
+* `(` and `)` to cycle main selection
+* `<space>` to keep only main selection, `<a-space>` to keep all selections but main
