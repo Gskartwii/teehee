@@ -39,6 +39,9 @@ impl Selection {
     }
 
     pub fn remove_main(&mut self) {
+        if self.regions.len() == 1 {
+            return;
+        }
         self.regions.remove(self.main_selection);
         self.main_selection = std::cmp::min(self.regions.len() - 1, self.main_selection);
         self.regions[self.main_selection].main = true;
@@ -141,6 +144,18 @@ impl Selection {
 
     pub fn iter(&self) -> impl Iterator<Item = &SelRegion> {
         self.regions.iter()
+    }
+
+    pub fn select_next(&mut self) {
+        self.regions[self.main_selection].main = false;
+        self.main_selection = (self.main_selection + 1) % self.regions.len();
+        self.regions[self.main_selection].main = true;
+    }
+
+    pub fn select_prev(&mut self) {
+        self.regions[self.main_selection].main = false;
+        self.main_selection = (self.main_selection + self.regions.len() - 1) % self.regions.len();
+        self.regions[self.main_selection].main = true;
     }
 }
 

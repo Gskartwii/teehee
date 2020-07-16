@@ -811,6 +811,32 @@ impl HexView {
                                 hex: ch.is_ascii_lowercase(),
                             };
                         }
+                        Event::Key(KeyEvent {
+                            code: KeyCode::Char(' '),
+                            modifiers,
+                        }) => {
+                            if modifiers.contains(KeyModifiers::ALT) {
+                                self.selection.remove_main();
+                                self.draw(stdout)?;
+                            } else {
+                                self.selection.retain_main();
+                                self.draw(stdout)?;
+                            }
+                        }
+                        Event::Key(KeyEvent {
+                            code: KeyCode::Char('('),
+                            ..
+                        }) => {
+                            self.selection.select_prev();
+                            self.draw(stdout)?;
+                        }
+                        Event::Key(KeyEvent {
+                            code: KeyCode::Char(')'),
+                            ..
+                        }) => {
+                            self.selection.select_next();
+                            self.draw(stdout)?;
+                        }
                         evt => self.handle_event_default(stdout, evt)?,
                     };
                     self.last_draw_time = start.elapsed();
