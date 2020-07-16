@@ -684,29 +684,26 @@ impl HexView {
                 modifiers,
             }) if modifiers.contains(KeyModifiers::CONTROL) => {
                 let inserted_bytes = vec![0];
-                let delta = insert(&self.data, &self.selection, inserted_bytes, before);
-                if before {
-                    self.apply_delta(stdout, &delta)?;
-                } else {
-                    self.selection.apply_delta_offset_carets(&delta, 1, 0);
-                    self.apply_delta_no_cursor_update(stdout, &delta)?;
-                }
+                let delta = insert(&self.data, &self.selection, inserted_bytes);
+                self.apply_delta(stdout, &delta)?;
             }
             Event::Key(KeyEvent {
                 code: KeyCode::Backspace,
                 ..
             }) => {
-                let delta = if before {
-                    backspace(&self.data, &self.selection)
-                } else {
-                    delete_cursor(&self.data, &self.selection)
-                };
+                if self.data.is_empty() {
+                    return Ok(());
+                }
+                let delta = backspace(&self.data, &self.selection);
                 self.apply_delta(stdout, &delta)?;
             }
             Event::Key(KeyEvent {
                 code: KeyCode::Delete,
                 ..
             }) => {
+                if self.data.is_empty() {
+                    return Ok(());
+                }
                 let delta = delete_cursor(&self.data, &self.selection);
                 self.apply_delta(stdout, &delta)?;
             }
@@ -803,7 +800,15 @@ impl HexView {
                             let invalidated_rows = if before {
                                 self.map_selections(|region| vec![region.to_backward()])
                             } else {
-                                self.map_selections(|region| vec![region.to_forward()])
+                                let bytes_per_line = self.bytes_per_line;
+                                let max_size = self.data.len();
+                                self.map_selections(|region| {
+                                    vec![region.to_forward().simple_extend(
+                                        Direction::Right,
+                                        bytes_per_line,
+                                        max_size,
+                                    )]
+                                })
                             };
                             self.draw_rows(stdout, &invalidated_rows)?;
                             self.state = State::Insert {
@@ -835,6 +840,13 @@ impl HexView {
                             ..
                         }) => {
                             self.selection.select_next();
+                            self.draw(stdout)?;
+                        }
+                        Event::Key(KeyEvent {
+                            code: KeyCode::Char('%'),
+                            ..
+                        }) => {
+                            self.selection.select_all(self.data.len());
                             self.draw(stdout)?;
                         }
                         evt => self.handle_event_default(stdout, evt)?,
@@ -886,26 +898,19 @@ impl HexView {
                     Event::Key(_) => self.state = State::Normal,
                     evt => self.handle_event_default(stdout, evt)?,
                 },
-                State::Insert { hex, before } => match event::read()? {
+                State::Insert { hex, .. } => match event::read()? {
                     Event::Key(KeyEvent {
                         code: KeyCode::Char(ch),
                         modifiers,
                     }) if !hex && modifiers.is_empty() => {
                         let mut inserted_bytes = vec![0u8; ch.len_utf8()];
                         ch.encode_utf8(&mut inserted_bytes);
-                        let insertion_len = inserted_bytes.len() as isize;
 
                         // At this point `before` doesn't really matter;
                         // the cursors will have been moved in normal mode to their
                         // correct places.
-                        let delta = insert(&self.data, &self.selection, inserted_bytes, before);
-                        if before {
-                            self.apply_delta(stdout, &delta)?;
-                        } else {
-                            self.selection
-                                .apply_delta_offset_carets(&delta, insertion_len, 0);
-                            self.apply_delta_no_cursor_update(stdout, &delta)?;
-                        }
+                        let delta = insert(&self.data, &self.selection, inserted_bytes);
+                        self.apply_delta(stdout, &delta)?;
                     }
                     Event::Key(KeyEvent {
                         code: KeyCode::Char(ch),
@@ -914,13 +919,10 @@ impl HexView {
                         let inserted = ch.to_digit(16).unwrap() << 4;
                         let mut inserted_bytes = vec![inserted as u8];
                         let insertion_delta =
-                            insert(&self.data, &self.selection, inserted_bytes.clone(), before);
+                            insert(&self.data, &self.selection, inserted_bytes.clone());
                         self.use_half_cursor = true;
-                        self.selection.apply_delta_offset_carets(
-                            &insertion_delta,
-                            if before { -1 } else { 1 },
-                            if before { 0 } else { 0 },
-                        );
+                        self.selection
+                            .apply_delta_offset_carets(&insertion_delta, -1, 0);
                         self.apply_delta_no_cursor_update(stdout, &insertion_delta)?;
                         stdout.flush()?;
 
@@ -938,36 +940,6 @@ impl HexView {
                         }) = next_key_event
                         {
                             if !second_ch.is_ascii_hexdigit() || !modifiers.is_empty() {
-                                if before {
-                                    // The partial insertion will have extended our selection in the direction
-                                    // of the cursor. Fix this up before doing anything.
-                                    let bytes_per_line = self.bytes_per_line;
-                                    let max_bytes = self.data.len();
-
-                                    let invalidated_rows = self.map_selections(|region| {
-                                        vec![region.simple_extend(
-                                            Direction::Right,
-                                            bytes_per_line,
-                                            max_bytes,
-                                        )]
-                                    });
-                                    self.draw_rows(stdout, &invalidated_rows)?;
-                                }
-
-                                self.handle_insert_event_default(stdout, next_key_event)?;
-                            } else {
-                                inserted_bytes[0] |= second_ch.to_digit(16).unwrap() as u8;
-                                let delta = change(&self.data, &self.selection, inserted_bytes);
-
-                                self.selection.apply_delta_offset_carets(
-                                    &delta,
-                                    if before { 0 } else { -1 },
-                                    if before { 0 } else { 0 },
-                                );
-                                self.apply_delta_no_cursor_update(stdout, &delta)?;
-                            }
-                        } else {
-                            if before {
                                 // The partial insertion will have extended our selection in the direction
                                 // of the cursor. Fix this up before doing anything.
                                 let bytes_per_line = self.bytes_per_line;
@@ -981,7 +953,29 @@ impl HexView {
                                     )]
                                 });
                                 self.draw_rows(stdout, &invalidated_rows)?;
+
+                                self.handle_insert_event_default(stdout, next_key_event)?;
+                            } else {
+                                inserted_bytes[0] |= second_ch.to_digit(16).unwrap() as u8;
+                                let delta = change(&self.data, &self.selection, inserted_bytes);
+
+                                self.selection.apply_delta_offset_carets(&delta, 0, 0);
+                                self.apply_delta_no_cursor_update(stdout, &delta)?;
                             }
+                        } else {
+                            // The partial insertion will have extended our selection in the direction
+                            // of the cursor. Fix this up before doing anything.
+                            let bytes_per_line = self.bytes_per_line;
+                            let max_bytes = self.data.len();
+
+                            let invalidated_rows = self.map_selections(|region| {
+                                vec![region.simple_extend(
+                                    Direction::Right,
+                                    bytes_per_line,
+                                    max_bytes,
+                                )]
+                            });
+                            self.draw_rows(stdout, &invalidated_rows)?;
 
                             self.handle_insert_event_default(stdout, next_key_event)?;
                         }

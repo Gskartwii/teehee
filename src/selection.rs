@@ -47,6 +47,15 @@ impl Selection {
         self.regions[self.main_selection].main = true;
     }
 
+    pub fn select_all(&mut self, buf_size: usize) {
+        self.clear();
+        if buf_size == 0 {
+            return;
+        }
+        self.regions[0].tail = 0;
+        self.regions[0].caret = buf_size - 1;
+    }
+
     fn search(&self, offset: usize) -> usize {
         if offset > self.regions.last().unwrap().max() {
             return self.regions.len();

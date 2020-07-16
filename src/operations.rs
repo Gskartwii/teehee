@@ -40,22 +40,11 @@ pub fn delete_cursor(base: &Rope, selection: &Selection) -> RopeDelta {
     builder.build()
 }
 
-pub fn insert(
-    base: &Rope,
-    selection: &Selection,
-    text: impl Into<Rope>,
-    before: bool,
-) -> RopeDelta {
+pub fn insert(base: &Rope, selection: &Selection, text: impl Into<Rope>) -> RopeDelta {
     let inserted = text.into();
     let mut builder = DeltaBuilder::new(base.len());
     for region in selection.iter() {
-        let fixed_caret = if before {
-            region.caret
-        } else {
-            region.caret + 1
-        };
-
-        let iv = Interval::new(fixed_caret, fixed_caret);
+        let iv = Interval::new(region.caret, region.caret);
         builder.replace(iv, inserted.clone().into_node());
     }
 
