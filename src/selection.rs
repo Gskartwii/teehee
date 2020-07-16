@@ -124,7 +124,7 @@ impl Selection {
         let mut new_main_sel = 0;
         for (i, region) in self.regions.iter().copied().enumerate() {
             for new_region in f(region) {
-                if regions_out.len() == 0 || !regions_out.last().unwrap().overlaps(&new_region) {
+                if regions_out.is_empty() || !regions_out.last().unwrap().overlaps(&new_region) {
                     regions_out.push(new_region);
                 } else if let Some(last) = regions_out.pop() {
                     regions_out.push(last.merge(&new_region));
@@ -141,10 +141,6 @@ impl Selection {
 
     pub fn len(&self) -> usize {
         self.regions.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        false
     }
 
     pub fn main_cursor_offset(&self) -> usize {

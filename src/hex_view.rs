@@ -211,7 +211,7 @@ impl HexView {
             if let Some(end_cmd) = style_cmd.end_style() {
                 queue_style(stdout, end_cmd)?;
             }
-            queue!(stdout, style::Print(format!(" ")))?;
+            queue!(stdout, style::Print(" ".to_string()))?;
         }
         Ok(())
     }
