@@ -28,6 +28,7 @@ impl Selection {
 
     pub fn clear(&mut self) {
         self.regions = vec![Default::default()];
+        self.regions[0].main = true;
         self.main_selection = 0;
     }
 
@@ -40,6 +41,7 @@ impl Selection {
     pub fn remove_main(&mut self) {
         self.regions.remove(self.main_selection);
         self.main_selection = std::cmp::min(self.regions.len() - 1, self.main_selection);
+        self.regions[self.main_selection].main = true;
     }
 
     fn search(&self, offset: usize) -> usize {
@@ -118,6 +120,7 @@ impl Selection {
             }
             if i == self.main_selection {
                 new_main_sel = regions_out.len() - 1;
+                regions_out.last_mut().unwrap().main = true;
             }
         }
         self.regions = regions_out;
@@ -147,6 +150,8 @@ pub struct SelRegion {
     pub caret: usize,
     // End of selection, exclusive
     pub tail: usize,
+
+    main: bool,
 }
 
 impl Default for SelRegion {
@@ -165,7 +170,15 @@ pub enum Direction {
 
 impl SelRegion {
     pub fn new(caret: usize, tail: usize) -> Self {
-        SelRegion { caret, tail }
+        SelRegion {
+            caret,
+            tail,
+            main: false,
+        }
+    }
+
+    pub fn is_main(&self) -> bool {
+        self.main
     }
 
     pub fn with_direction(self, backward: bool) -> SelRegion {

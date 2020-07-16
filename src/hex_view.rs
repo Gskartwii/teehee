@@ -298,11 +298,19 @@ impl HexView {
             priority: Priority::Basic,
         }
     }
-    fn selection_style(&self) -> PrioritizedStyle {
+    fn active_selection_style(&self) -> PrioritizedStyle {
         PrioritizedStyle {
             style: style::ContentStyle::new()
                 .foreground(style::Color::Grey)
                 .background(style::Color::DarkYellow),
+            priority: Priority::Selection,
+        }
+    }
+    fn inactive_selection_style(&self) -> PrioritizedStyle {
+        PrioritizedStyle {
+            style: style::ContentStyle::new()
+                .foreground(style::Color::Grey)
+                .background(style::Color::DarkGrey),
             priority: Priority::Selection,
         }
     }
@@ -329,14 +337,22 @@ impl HexView {
 
         // Add to command stack those commands that being out of bounds
         if !selected_regions.is_empty() && selected_regions[0].min() < start {
-            command_stack.push(self.selection_style());
+            command_stack.push(if selected_regions[0].is_main() {
+                self.active_selection_style()
+            } else {
+                self.inactive_selection_style()
+            });
         }
 
         for i in visible {
             let normalized = i - start;
             if !selected_regions.is_empty() {
                 if selected_regions[0].min() == i {
-                    command_stack.push(self.selection_style());
+                    command_stack.push(if selected_regions[0].is_main() {
+                        self.active_selection_style()
+                    } else {
+                        self.inactive_selection_style()
+                    });
                     mark_commands[normalized] = mark_commands[normalized]
                         .clone()
                         .with_start_style(command_stack.last().unwrap().clone());
