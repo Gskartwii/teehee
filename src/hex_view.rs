@@ -72,43 +72,39 @@ struct PrioritizedStyle {
     priority: Priority,
 }
 
-#[derive(Debug, Clone)]
-enum StylingCommand {
-    Start(PrioritizedStyle),
-    End(PrioritizedStyle),
-    StartEnd(PrioritizedStyle, PrioritizedStyle),
-    None,
+#[derive(Debug, Clone, Default)]
+struct StylingCommand {
+    start: Option<PrioritizedStyle>,
+    mid: Option<PrioritizedStyle>,
+    end: Option<PrioritizedStyle>,
 }
 
 impl StylingCommand {
     fn start_style(&self) -> Option<&style::ContentStyle> {
-        match self {
-            StylingCommand::Start(PrioritizedStyle { style, .. }) => Some(style),
-            StylingCommand::StartEnd(PrioritizedStyle { style, .. }, _) => Some(style),
-            _ => None,
-        }
+        self.start.as_ref().map(|x| &x.style)
+    }
+    fn mid_style(&self) -> Option<&style::ContentStyle> {
+        self.mid.as_ref().map(|x| &x.style)
     }
     fn end_style(&self) -> Option<&style::ContentStyle> {
-        match self {
-            StylingCommand::End(PrioritizedStyle { style, .. }) => Some(style),
-            StylingCommand::StartEnd(_, PrioritizedStyle { style, .. }) => Some(style),
-            _ => None,
-        }
+        self.end.as_ref().map(|x| &x.style)
     }
     fn with_start_style(self, style: PrioritizedStyle) -> StylingCommand {
-        match self {
-            StylingCommand::None | StylingCommand::Start(_) => StylingCommand::Start(style),
-            StylingCommand::End(e) | StylingCommand::StartEnd(_, e) => {
-                StylingCommand::StartEnd(style, e)
-            }
+        StylingCommand {
+            start: Some(style),
+            ..self
+        }
+    }
+    fn with_mid_style(self, style: PrioritizedStyle) -> StylingCommand {
+        StylingCommand {
+            mid: Some(style),
+            ..self
         }
     }
     fn with_end_style(self, style: PrioritizedStyle) -> StylingCommand {
-        match self {
-            StylingCommand::None | StylingCommand::End(_) => StylingCommand::End(style),
-            StylingCommand::Start(s) | StylingCommand::StartEnd(s, _) => {
-                StylingCommand::StartEnd(s, style)
-            }
+        StylingCommand {
+            end: Some(style),
+            ..self
         }
     }
 }
@@ -170,6 +166,7 @@ pub struct HexView {
     start_offset: usize,
     selection: Selection,
     last_visible_rows: Cell<usize>,
+    use_half_cursor: bool,
 
     last_draw_time: time::Duration,
 
@@ -185,6 +182,7 @@ impl HexView {
             size: terminal::size().unwrap(),
             selection: Selection::new(),
             last_visible_rows: Cell::new(0),
+            use_half_cursor: false,
 
             last_draw_time: Default::default(),
 
@@ -205,7 +203,11 @@ impl HexView {
             if let Some(start_cmd) = style_cmd.start_style() {
                 queue_style(stdout, start_cmd)?;
             }
-            queue!(stdout, style::Print(format!("{:02x}", byte)))?;
+            queue!(stdout, style::Print(format!("{:x}", byte >> 4)))?;
+            if let Some(mid_cmd) = style_cmd.mid_style() {
+                queue_style(stdout, mid_cmd)?;
+            }
+            queue!(stdout, style::Print(format!("{:x}", byte & 0xf)))?;
             if let Some(end_cmd) = style_cmd.end_style() {
                 queue_style(stdout, end_cmd)?;
             }
@@ -320,7 +322,7 @@ impl HexView {
     }
 
     fn mark_commands(&self, visible: Range<usize>) -> Vec<StylingCommand> {
-        let mut mark_commands = vec![StylingCommand::None; visible.len()];
+        let mut mark_commands = vec![StylingCommand::default(); visible.len()];
         let mut selected_regions = self.selection.regions_in_range(visible.start, visible.end);
         let mut command_stack = vec![self.default_style()];
         let start = visible.start;
@@ -341,10 +343,23 @@ impl HexView {
                 }
                 if selected_regions[0].caret == i {
                     let base_style = command_stack.last().unwrap().clone();
-                    mark_commands[normalized] = mark_commands[normalized]
-                        .clone()
-                        .with_start_style(self.caret_style())
-                        .with_end_style(base_style);
+                    let mut caret_cmd = mark_commands[normalized].clone();
+                    if self.use_half_cursor {
+                        if i == selected_regions[0].min() {
+                            caret_cmd = caret_cmd
+                                .with_mid_style(self.caret_style())
+                                .with_end_style(base_style);
+                        } else {
+                            caret_cmd = caret_cmd
+                                .with_start_style(base_style)
+                                .with_mid_style(self.caret_style());
+                        }
+                    } else {
+                        caret_cmd = caret_cmd
+                            .with_start_style(self.caret_style())
+                            .with_end_style(base_style);
+                    }
+                    mark_commands[normalized] = caret_cmd;
                 }
                 if selected_regions[0].max() == i {
                     mark_commands[normalized] = mark_commands[normalized]
@@ -636,30 +651,40 @@ impl HexView {
     }
 
     fn handle_insert_event_default(&mut self, stdout: &mut impl Write, evt: Event) -> Result<()> {
+        let (hex, before) = if let State::Insert { hex, before } = self.state {
+            (hex, before)
+        } else {
+            unreachable!()
+        };
         match evt {
             Event::Key(KeyEvent {
                 code: KeyCode::Char('o'),
                 modifiers,
             }) if modifiers.contains(KeyModifiers::CONTROL) => {
-                if let State::Insert { hex, before } = self.state {
-                    self.state = State::Insert { hex: !hex, before }
-                } else {
-                    unreachable!();
-                }
+                self.state = State::Insert { hex: !hex, before }
             }
             Event::Key(KeyEvent {
                 code: KeyCode::Char('n'),
                 modifiers,
             }) if modifiers.contains(KeyModifiers::CONTROL) => {
                 let inserted_bytes = vec![0];
-                let delta = insert(&self.data, &self.selection, inserted_bytes);
-                self.apply_delta(stdout, &delta)?;
+                let delta = insert(&self.data, &self.selection, inserted_bytes, before);
+                if before {
+                    self.apply_delta(stdout, &delta)?;
+                } else {
+                    self.selection.apply_delta_offset_carets(&delta, 1, 0);
+                    self.apply_delta_no_cursor_update(stdout, &delta)?;
+                }
             }
             Event::Key(KeyEvent {
                 code: KeyCode::Backspace,
                 ..
             }) => {
-                let delta = backspace(&self.data, &self.selection);
+                let delta = if before {
+                    backspace(&self.data, &self.selection)
+                } else {
+                    delete_cursor(&self.data, &self.selection)
+                };
                 self.apply_delta(stdout, &delta)?;
             }
             Event::Key(KeyEvent {
@@ -757,13 +782,17 @@ impl HexView {
                         Event::Key(KeyEvent {
                             code: KeyCode::Char(ch),
                             ..
-                        }) if ch == 'i' || ch == 'I' => {
-                            let invalidated_rows =
-                                self.map_selections(|region| vec![region.to_backward()]);
+                        }) if ch == 'i' || ch == 'I' || ch == 'a' || ch == 'A' => {
+                            let before = ch.to_ascii_lowercase() == 'i';
+                            let invalidated_rows = if before {
+                                self.map_selections(|region| vec![region.to_backward()])
+                            } else {
+                                self.map_selections(|region| vec![region.to_forward()])
+                            };
                             self.draw_rows(stdout, &invalidated_rows)?;
                             self.state = State::Insert {
-                                before: true,
-                                hex: ch == 'i',
+                                before,
+                                hex: ch.is_ascii_lowercase(),
                             };
                         }
                         evt => self.handle_event_default(stdout, evt)?,
@@ -822,11 +851,19 @@ impl HexView {
                     }) if !hex && modifiers.is_empty() => {
                         let mut inserted_bytes = vec![0u8; ch.len_utf8()];
                         ch.encode_utf8(&mut inserted_bytes);
+                        let insertion_len = inserted_bytes.len() as isize;
+
                         // At this point `before` doesn't really matter;
                         // the cursors will have been moved in normal mode to their
                         // correct places.
-                        let delta = insert(&self.data, &self.selection, inserted_bytes);
-                        self.apply_delta(stdout, &delta)?;
+                        let delta = insert(&self.data, &self.selection, inserted_bytes, before);
+                        if before {
+                            self.apply_delta(stdout, &delta)?;
+                        } else {
+                            self.selection
+                                .apply_delta_offset_carets(&delta, insertion_len, 0);
+                            self.apply_delta_no_cursor_update(stdout, &delta)?;
+                        }
                     }
                     Event::Key(KeyEvent {
                         code: KeyCode::Char(ch),
@@ -835,69 +872,75 @@ impl HexView {
                         let inserted = ch.to_digit(16).unwrap() << 4;
                         let mut inserted_bytes = vec![inserted as u8];
                         let insertion_delta =
-                            insert(&self.data, &self.selection, inserted_bytes.clone());
-                        self.selection
-                            .apply_delta_offset_carets(&insertion_delta, -1);
+                            insert(&self.data, &self.selection, inserted_bytes.clone(), before);
+                        self.use_half_cursor = true;
+                        self.selection.apply_delta_offset_carets(
+                            &insertion_delta,
+                            if before { -1 } else { 1 },
+                            if before { 0 } else { 0 },
+                        );
                         self.apply_delta_no_cursor_update(stdout, &insertion_delta)?;
                         stdout.flush()?;
 
+                        self.use_half_cursor = false; // After next update, no more half cursor
                         let next_key_event = loop {
                             match event::read()? {
                                 k @ Event::Key(_) => break k,
                                 evt => self.handle_insert_event_default(stdout, evt)?,
                             }
                         };
+
                         if let Event::Key(KeyEvent {
                             code: KeyCode::Char(second_ch),
                             modifiers,
                         }) = next_key_event
                         {
                             if !second_ch.is_ascii_hexdigit() || !modifiers.is_empty() {
-                                // The partial insertion will have extended our selection in the direction
-                                // of the cursor. Fix this up before doing anything.
-                                let bytes_per_line = self.bytes_per_line;
-                                let max_bytes = self.data.len();
-                                let fixup_direction = if before {
-                                    Direction::Right
-                                } else {
-                                    Direction::Left
-                                };
+                                if before {
+                                    // The partial insertion will have extended our selection in the direction
+                                    // of the cursor. Fix this up before doing anything.
+                                    let bytes_per_line = self.bytes_per_line;
+                                    let max_bytes = self.data.len();
 
-                                let invalidated_rows = self.map_selections(|region| {
-                                    vec![region.simple_extend(
-                                        fixup_direction,
-                                        bytes_per_line,
-                                        max_bytes,
-                                    )]
-                                });
-                                self.draw_rows(stdout, &invalidated_rows)?;
+                                    let invalidated_rows = self.map_selections(|region| {
+                                        vec![region.simple_extend(
+                                            Direction::Right,
+                                            bytes_per_line,
+                                            max_bytes,
+                                        )]
+                                    });
+                                    self.draw_rows(stdout, &invalidated_rows)?;
+                                }
 
                                 self.handle_insert_event_default(stdout, next_key_event)?;
                             } else {
                                 inserted_bytes[0] |= second_ch.to_digit(16).unwrap() as u8;
                                 let delta = change(&self.data, &self.selection, inserted_bytes);
 
-                                self.apply_delta(stdout, &delta)?;
+                                self.selection.apply_delta_offset_carets(
+                                    &delta,
+                                    if before { 0 } else { -1 },
+                                    if before { 0 } else { 0 },
+                                );
+                                self.apply_delta_no_cursor_update(stdout, &delta)?;
                             }
                         } else {
-                            // The partial insertion will have extended our selection in the direction
-                            // of the cursor. Fix this up before doing anything.
-                            let bytes_per_line = self.bytes_per_line;
-                            let max_bytes = self.data.len();
-                            let fixup_direction = if before {
-                                Direction::Right
-                            } else {
-                                Direction::Left
-                            };
+                            if before {
+                                // The partial insertion will have extended our selection in the direction
+                                // of the cursor. Fix this up before doing anything.
+                                let bytes_per_line = self.bytes_per_line;
+                                let max_bytes = self.data.len();
 
-                            let invalidated_rows = self.map_selections(|region| {
-                                vec![region.simple_extend(
-                                    fixup_direction,
-                                    bytes_per_line,
-                                    max_bytes,
-                                )]
-                            });
-                            self.draw_rows(stdout, &invalidated_rows)?;
+                                let invalidated_rows = self.map_selections(|region| {
+                                    vec![region.simple_extend(
+                                        Direction::Right,
+                                        bytes_per_line,
+                                        max_bytes,
+                                    )]
+                                });
+                                self.draw_rows(stdout, &invalidated_rows)?;
+                            }
+
                             self.handle_insert_event_default(stdout, next_key_event)?;
                         }
                     }

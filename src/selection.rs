@@ -77,7 +77,12 @@ impl Selection {
         })
     }
 
-    pub fn apply_delta_offset_carets(&mut self, delta: &RopeDelta, offset: isize) {
+    pub fn apply_delta_offset_carets(
+        &mut self,
+        delta: &RopeDelta,
+        caret_offset: isize,
+        tail_offset: isize,
+    ) {
         let new_max_len = delta.new_document_len();
         if new_max_len == 0 {
             self.clear();
@@ -89,9 +94,12 @@ impl Selection {
             let new_region = SelRegion::new(
                 std::cmp::min(
                     new_max_len - 1,
-                    (transformer.transform(region.caret, true) as isize + offset) as usize,
+                    (transformer.transform(region.caret, true) as isize + caret_offset) as usize,
                 ),
-                std::cmp::min(new_max_len - 1, transformer.transform(region.tail, true)),
+                std::cmp::min(
+                    new_max_len - 1,
+                    (transformer.transform(region.tail, true) as isize + tail_offset) as usize,
+                ),
             );
             vec![new_region]
         })
@@ -284,6 +292,10 @@ impl SelRegion {
 
     pub fn to_backward(&self) -> SelRegion {
         SelRegion::new(self.min(), self.max())
+    }
+
+    pub fn to_forward(&self) -> SelRegion {
+        SelRegion::new(self.max(), self.min())
     }
 
     pub fn merge(&self, other: &SelRegion) -> SelRegion {
