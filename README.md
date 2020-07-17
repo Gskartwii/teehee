@@ -44,3 +44,6 @@ Teehee supports multiple selections.
     * `<c-o>` to switch between ascii and hex inserting
 * `(` and `)` to cycle main selection
 * `<space>` to keep only main selection, `<a-space>` to keep all selections but main
+* `r<digit><digit>` to replace a each selected character with the character given by the two hex digits
+    * `R<key>` instead of `r` to replace with a single ascii character instead
+    * `r<c-n>` to replace with null bytes
