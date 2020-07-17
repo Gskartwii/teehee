@@ -6,11 +6,11 @@ Inspired by Vim, Kakoune and Hiew.
 
 Reverse engineers, software engineers and other IT people often need to work with binary files. Hex editors are usually the go-to tool for dealing with binary file formats when a more specialized tool isn't available. Many of the existing hex editors lack support for modal editing, which Vim/Kakoune/Emacs users will miss. Hiew supports it to an extent, but it's non-free software, and its keybinds are unintuitive. Teehee is designed to offer a native-feeling experience to Kakoune and Vim users, while also providing additional hex editing capabilities like coloured marks for regions of data and encryption/compression scripts.
 
-## Screenshot (more coming later)
+## Demo
 
-![image](https://user-images.githubusercontent.com/6651822/87162527-bab99f00-c2ce-11ea-9aa5-02f81dddc0de.png)
+[![asciicast](https://asciinema.org/a/bVEmTjQUMrjOUNQC7sBTL7rJO.svg)](https://asciinema.org/a/bVEmTjQUMrjOUNQC7sBTL7rJO)
 
-Teehee supports multiple selections.
+Teehee supports multiple selections, efficient selection modifying commands and various data editing operations.
 
 ## Design
 
