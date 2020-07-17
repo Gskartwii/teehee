@@ -863,6 +863,7 @@ impl HexView {
                             ..
                         }) => {
                             self.selection.select_prev();
+                            self.maybe_update_offset(stdout)?;
                             self.draw(stdout)?;
                         }
                         Event::Key(KeyEvent {
@@ -870,6 +871,7 @@ impl HexView {
                             ..
                         }) => {
                             self.selection.select_next();
+                            self.maybe_update_offset(stdout)?;
                             self.draw(stdout)?;
                         }
                         Event::Key(KeyEvent {
@@ -877,6 +879,7 @@ impl HexView {
                             ..
                         }) => {
                             self.selection.select_all(self.data.len());
+                            self.maybe_update_offset(stdout)?;
                             self.draw(stdout)?;
                         }
                         Event::Key(KeyEvent {
