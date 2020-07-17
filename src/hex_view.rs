@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::cell::Cell;
 use std::cmp;
 use std::collections::HashSet;
@@ -28,32 +29,42 @@ enum State {
     JumpTo { extend: bool },
     Split,
     Insert { before: bool, hex: bool },
+    Replace { hex: bool, hex_half: Option<u8> },
 }
 
 impl State {
-    fn name(&self) -> &'static str {
+    fn name(&self) -> Cow<str> {
         match self {
-            State::Quitting => "QUIT",
-            State::Normal => "NORMAL",
-            State::JumpTo { extend: true } => "EXTEND",
-            State::JumpTo { extend: false } => "JUMP",
-            State::Split => "SPLIT",
+            State::Quitting => "QUIT".into(),
+            State::Normal => "NORMAL".into(),
+            State::JumpTo { extend: true } => "EXTEND".into(),
+            State::JumpTo { extend: false } => "JUMP".into(),
+            State::Split => "SPLIT".into(),
             State::Insert {
                 before: true,
                 hex: true,
-            } => "INSERT (hex)",
+            } => "INSERT (hex)".into(),
             State::Insert {
                 before: true,
                 hex: false,
-            } => "INSERT (ascii)",
+            } => "INSERT (ascii)".into(),
             State::Insert {
                 before: false,
                 hex: true,
-            } => "APPEND (hex)",
+            } => "APPEND (hex)".into(),
             State::Insert {
                 before: false,
                 hex: false,
-            } => "APPEND (ascii)",
+            } => "APPEND (ascii)".into(),
+            State::Replace {
+                hex: true,
+                hex_half: None,
+            } => "REPLACE (hex)".into(),
+            State::Replace { hex: false, .. } => "REPLACE (ascii)".into(),
+            State::Replace {
+                hex: true,
+                hex_half: Some(ch),
+            } => format!("REPLACE (hex: {:x}...)", ch >> 4).into(),
         }
     }
 }
@@ -717,6 +728,24 @@ impl HexView {
         Ok(())
     }
 
+    fn handle_replace_event_default(&mut self, stdout: &mut impl Write, evt: Event) -> Result<()> {
+        match evt {
+            Event::Key(KeyEvent {
+                code: KeyCode::Char('n'),
+                modifiers,
+            }) if modifiers.contains(KeyModifiers::CONTROL) => {
+                let delta = replace(&self.data, &self.selection, 0u8);
+                self.apply_delta_no_cursor_update(stdout, &delta)?;
+            }
+            Event::Key(KeyEvent { .. }) => {
+                // Unhandled keys should reset the state
+                self.state = State::Normal;
+            }
+            evt => self.handle_event_default(stdout, evt)?,
+        };
+        Ok(())
+    }
+
     pub fn run_event_loop(mut self, stdout: &mut impl Write) -> Result<()> {
         execute!(stdout, terminal::EnterAlternateScreen, cursor::Hide)?;
 
@@ -848,6 +877,20 @@ impl HexView {
                         }) => {
                             self.selection.select_all(self.data.len());
                             self.draw(stdout)?;
+                        }
+                        Event::Key(KeyEvent {
+                            code: KeyCode::Char(ch),
+                            ..
+                        }) => {
+                            if ch == 'r' || ch == 'R' {
+                                if !self.data.is_empty() {
+                                    let hex = ch.is_ascii_lowercase();
+                                    self.state = State::Replace {
+                                        hex,
+                                        hex_half: None,
+                                    };
+                                }
+                            }
                         }
                         evt => self.handle_event_default(stdout, evt)?,
                     };
@@ -982,6 +1025,39 @@ impl HexView {
                     }
                     evt => self.handle_insert_event_default(stdout, evt)?,
                 },
+                State::Replace { hex, hex_half } => {
+                    match event::read()? {
+                        Event::Key(KeyEvent {
+                            code: KeyCode::Char(ch),
+                            modifiers,
+                        }) if !hex && modifiers.is_empty() => {
+                            let delta = replace(&self.data, &self.selection, ch as u8); // lossy!
+                            self.apply_delta_no_cursor_update(stdout, &delta)?;
+                            self.state = State::Normal;
+                        }
+                        Event::Key(KeyEvent {
+                            code: KeyCode::Char(ch),
+                            modifiers,
+                        }) if hex && ch.is_ascii_hexdigit() && modifiers.is_empty() => {
+                            if let Some(half) = hex_half {
+                                let delta = replace(
+                                    &self.data,
+                                    &self.selection,
+                                    half | ch.to_digit(16).unwrap() as u8,
+                                );
+                                self.apply_delta_no_cursor_update(stdout, &delta)?;
+                                self.state = State::Normal;
+                            } else {
+                                let replacing_ch = (ch.to_digit(16).unwrap() as u8) << 4;
+                                self.state = State::Replace {
+                                    hex,
+                                    hex_half: Some(replacing_ch),
+                                };
+                            }
+                        }
+                        evt => self.handle_replace_event_default(stdout, evt)?,
+                    }
+                }
             }
             self.draw_statusline(stdout)?;
             stdout.flush()?;

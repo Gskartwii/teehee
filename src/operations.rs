@@ -61,3 +61,16 @@ pub fn change(base: &Rope, selection: &Selection, text: impl Into<Rope>) -> Rope
 
     builder.build()
 }
+
+pub fn replace(base: &Rope, selection: &Selection, ch: u8) -> RopeDelta {
+    let mut builder = DeltaBuilder::new(base.len());
+    for region in selection.iter() {
+        let iv = Interval::new(region.min(), region.max() + 1);
+        builder.replace(
+            iv,
+            Rope::from(vec![ch; region.max() - region.min() + 1]).into_node(),
+        );
+    }
+
+    builder.build()
+}
