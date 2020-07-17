@@ -736,6 +736,7 @@ impl HexView {
             }) if modifiers.contains(KeyModifiers::CONTROL) => {
                 let delta = replace(&self.data, &self.selection, 0u8);
                 self.apply_delta_no_cursor_update(stdout, &delta)?;
+                self.state = State::Normal;
             }
             Event::Key(KeyEvent { .. }) => {
                 // Unhandled keys should reset the state
