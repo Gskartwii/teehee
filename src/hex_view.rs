@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::cell::Cell;
 use std::cmp;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::ops::Range;
 use std::time;
@@ -182,6 +182,7 @@ pub struct HexView {
     selection: Selection,
     last_visible_rows: Cell<usize>,
     use_half_cursor: bool,
+    registers: HashMap<char, Vec<Vec<u8>>>,
 
     last_draw_time: time::Duration,
 
@@ -198,6 +199,7 @@ impl HexView {
             selection: Selection::new(),
             last_visible_rows: Cell::new(0),
             use_half_cursor: false,
+            registers: HashMap::new(),
 
             last_draw_time: Default::default(),
 
@@ -662,7 +664,7 @@ impl HexView {
         }
     }
 
-    pub fn apply_delta(&mut self, stdout: &mut impl Write, delta: &RopeDelta) -> Result<()> {
+    fn apply_delta(&mut self, stdout: &mut impl Write, delta: &RopeDelta) -> Result<()> {
         self.selection.apply_delta(&delta);
         self.data = self.data.apply_delta(&delta);
         self.maybe_update_offset(stdout)?;
@@ -670,7 +672,7 @@ impl HexView {
         Ok(())
     }
 
-    pub fn apply_delta_no_cursor_update(
+    fn apply_delta_no_cursor_update(
         &mut self,
         stdout: &mut impl Write,
         delta: &RopeDelta,
@@ -679,6 +681,21 @@ impl HexView {
         self.maybe_update_offset(stdout)?;
         self.draw(stdout)?;
         Ok(())
+    }
+
+    fn yank_selections(&mut self, reg: char) {
+        if self.data.is_empty() {
+            self.registers
+                .insert(reg, vec![vec![]; self.selection.len()]);
+            return;
+        }
+
+        let selections = self
+            .selection
+            .iter()
+            .map(|region| self.data.slice_to_cow(region.min()..=region.max()).to_vec())
+            .collect();
+        self.registers.insert(reg, selections);
     }
 
     fn handle_insert_event_default(&mut self, stdout: &mut impl Write, evt: Event) -> Result<()> {
@@ -821,15 +838,35 @@ impl HexView {
                             code: KeyCode::Char('d'),
                             ..
                         }) => {
+                            self.yank_selections('"');
                             if !self.data.is_empty() {
                                 let delta = deletion(&self.data, &self.selection);
                                 self.apply_delta(stdout, &delta)?;
                             }
                         }
                         Event::Key(KeyEvent {
+                            code: KeyCode::Char('y'),
+                            ..
+                        }) => {
+                            self.yank_selections('"');
+                        }
+                        Event::Key(KeyEvent {
+                            code: KeyCode::Char(ch),
+                            ..
+                        }) if ch == 'p' || ch == 'P' => {
+                            let delta = paste(
+                                &self.data,
+                                &self.selection,
+                                &self.registers.get(&'"').unwrap_or(&vec![vec![]]),
+                                ch.is_ascii_lowercase(),
+                            );
+                            self.apply_delta(stdout, &delta)?;
+                        }
+                        Event::Key(KeyEvent {
                             code: KeyCode::Char(ch),
                             ..
                         }) if ch == 'c' || ch == 'C' => {
+                            self.yank_selections('"');
                             if !self.data.is_empty() {
                                 let delta = deletion(&self.data, &self.selection);
                                 self.apply_delta(stdout, &delta)?;
