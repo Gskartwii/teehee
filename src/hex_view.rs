@@ -69,6 +69,10 @@ impl State {
     }
 }
 
+fn is_normal_input_modifiers(mods: KeyModifiers) -> bool {
+    mods.is_empty() || mods == KeyModifiers::SHIFT
+}
+
 #[derive(Debug, Clone, Copy)]
 enum Priority {
     Basic,
@@ -825,6 +829,19 @@ impl HexView {
                         Event::Key(KeyEvent {
                             code: KeyCode::Char(ch),
                             ..
+                        }) if ch == 'c' || ch == 'C' => {
+                            if !self.data.is_empty() {
+                                let delta = deletion(&self.data, &self.selection);
+                                self.apply_delta(stdout, &delta)?;
+                            }
+                            self.state = State::Insert {
+                                before: true,
+                                hex: ch.is_ascii_lowercase(),
+                            };
+                        }
+                        Event::Key(KeyEvent {
+                            code: KeyCode::Char(ch),
+                            ..
                         }) if ch == 'i' || ch == 'I' || ch == 'a' || ch == 'A' => {
                             let before = ch.to_ascii_lowercase() == 'i';
                             let invalidated_rows = if before {
@@ -886,14 +903,12 @@ impl HexView {
                             code: KeyCode::Char(ch),
                             ..
                         }) => {
-                            if ch == 'r' || ch == 'R' {
-                                if !self.data.is_empty() {
-                                    let hex = ch.is_ascii_lowercase();
-                                    self.state = State::Replace {
-                                        hex,
-                                        hex_half: None,
-                                    };
-                                }
+                            if (ch == 'r' || ch == 'R') && !self.data.is_empty() {
+                                let hex = ch.is_ascii_lowercase();
+                                self.state = State::Replace {
+                                    hex,
+                                    hex_half: None,
+                                };
                             }
                         }
                         evt => self.handle_event_default(stdout, evt)?,
@@ -949,7 +964,7 @@ impl HexView {
                     Event::Key(KeyEvent {
                         code: KeyCode::Char(ch),
                         modifiers,
-                    }) if !hex && modifiers.is_empty() => {
+                    }) if !hex && is_normal_input_modifiers(modifiers) => {
                         let mut inserted_bytes = vec![0u8; ch.len_utf8()];
                         ch.encode_utf8(&mut inserted_bytes);
 
@@ -962,7 +977,7 @@ impl HexView {
                     Event::Key(KeyEvent {
                         code: KeyCode::Char(ch),
                         modifiers,
-                    }) if ch.is_ascii_hexdigit() && modifiers.is_empty() => {
+                    }) if ch.is_ascii_hexdigit() && is_normal_input_modifiers(modifiers) => {
                         let inserted = ch.to_digit(16).unwrap() << 4;
                         let mut inserted_bytes = vec![inserted as u8];
                         let insertion_delta =
@@ -986,7 +1001,9 @@ impl HexView {
                             modifiers,
                         }) = next_key_event
                         {
-                            if !second_ch.is_ascii_hexdigit() || !modifiers.is_empty() {
+                            if !second_ch.is_ascii_hexdigit()
+                                || !is_normal_input_modifiers(modifiers)
+                            {
                                 // The partial insertion will have extended our selection in the direction
                                 // of the cursor. Fix this up before doing anything.
                                 let bytes_per_line = self.bytes_per_line;
@@ -1034,7 +1051,7 @@ impl HexView {
                         Event::Key(KeyEvent {
                             code: KeyCode::Char(ch),
                             modifiers,
-                        }) if !hex && modifiers.is_empty() => {
+                        }) if !hex && is_normal_input_modifiers(modifiers) => {
                             let delta = replace(&self.data, &self.selection, ch as u8); // lossy!
                             self.apply_delta_no_cursor_update(stdout, &delta)?;
                             self.state = State::Normal;
@@ -1042,7 +1059,10 @@ impl HexView {
                         Event::Key(KeyEvent {
                             code: KeyCode::Char(ch),
                             modifiers,
-                        }) if hex && ch.is_ascii_hexdigit() && modifiers.is_empty() => {
+                        }) if hex
+                            && ch.is_ascii_hexdigit()
+                            && is_normal_input_modifiers(modifiers) =>
+                        {
                             if let Some(half) = hex_half {
                                 let delta = replace(
                                     &self.data,
