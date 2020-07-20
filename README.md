@@ -40,6 +40,7 @@ Teehee supports multiple selections, efficient selection modifying commands and 
 * `d` to delete selected data from buffer
 * `i` to enter insert mode at the beginning of selections (`I` to insert ascii instead of hex)
     * `a` instead of `i` to enter append mode instead
+    * `c` instead of `i` to delete selection contents, then enter insert mode
     * `<c-n>` to insert a null byte in ascii mode
     * `<c-o>` to switch between ascii and hex inserting
 * `(` and `)` to cycle main selection
@@ -47,3 +48,5 @@ Teehee supports multiple selections, efficient selection modifying commands and 
 * `r<digit><digit>` to replace a each selected character with the character given by the two hex digits
     * `R<key>` instead of `r` to replace with a single ascii character instead
     * `r<c-n>` to replace with null bytes
+* `y` to yank/copy selections to register `"`
+* `p` to paste register `"` contents from `y`/`d`/`c`
