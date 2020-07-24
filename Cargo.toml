@@ -9,3 +9,4 @@ edition = "2018"
 [dependencies]
 crossterm = "0.17.5"
 xi-rope = "0.3.0"
+lazy_static = "1.4.0"

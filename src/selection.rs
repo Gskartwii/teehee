@@ -2,7 +2,7 @@ use super::byte_rope::RopeDelta;
 
 use std::cmp;
 use std::default::Default;
-use xi_rope::Transformer;
+use xi_rope::{Interval, Transformer};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Selection {
@@ -54,6 +54,10 @@ impl Selection {
         }
         self.regions[0].tail = 0;
         self.regions[0].caret = buf_size - 1;
+    }
+
+    pub fn main(&self) -> SelRegion {
+        self.regions[self.main_selection]
     }
 
     fn search(&self, offset: usize) -> usize {
@@ -349,5 +353,11 @@ impl SelRegion {
             ),
             _ => panic!("Can't merge selections going in different directions"),
         }
+    }
+}
+
+impl Into<Interval> for SelRegion {
+    fn into(self) -> Interval {
+		(self.min()..=self.max()).into()
     }
 }
