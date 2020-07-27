@@ -2,6 +2,10 @@
 
 Inspired by Vim, Kakoune and Hiew.
 
+## Installation
+Just run `cargo install teehee`! If you don't have rust, you can get it from [rustup.rs](https://rustup.rs).
+The application will be available as the executable `teehee`.
+
 ## Motivation
 
 Reverse engineers, software engineers and other IT people often need to work with binary files. Hex editors are usually the go-to tool for dealing with binary file formats when a more specialized tool isn't available. Many of the existing hex editors lack support for modal editing, which Vim/Kakoune/Emacs users will miss. Hiew supports it to an extent, but it's non-free software, and its keybinds are unintuitive. Teehee is designed to offer a native-feeling experience to Kakoune and Vim users, while also providing additional hex editing capabilities like coloured marks for regions of data and encryption/compression scripts.
