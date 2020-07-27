@@ -8,7 +8,7 @@ Reverse engineers, software engineers and other IT people often need to work wit
 
 ## Demo
 
-[![asciicast](https://asciinema.org/a/bVEmTjQUMrjOUNQC7sBTL7rJO.svg)](https://asciinema.org/a/bVEmTjQUMrjOUNQC7sBTL7rJO)
+[![asciicast](https://asciinema.org/a/349728.svg)](https://asciinema.org/a/349728)
 
 Teehee supports multiple selections, efficient selection modifying commands and various data editing operations.
 
