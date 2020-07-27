@@ -60,7 +60,7 @@ pub fn paste(
     let mut builder = DeltaBuilder::new(base.len());
     let last_value = register_contents.last().unwrap();
     let reg_iter = register_contents
-        .into_iter()
+        .iter()
         .chain(std::iter::repeat(last_value));
     for (region, pasted) in selection.iter().zip(reg_iter) {
         let insert_pos = if after {
