@@ -9,25 +9,20 @@ use std::time;
 
 use crossterm::{
     cursor,
-    event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
+    event::{self, Event},
     execute, queue, style,
     style::Color,
     terminal, Result,
 };
+use xi_rope::Interval;
 
 use super::buffer::*;
-use super::byte_rope::*;
 use super::modes;
-use super::operations::*;
-use super::selection::*;
+use super::state::*;
 use std::io::Write;
 
 const VERTICAL: &str = "│";
 const RIGHTARROW: &str = "";
-
-fn is_normal_input_modifiers(mods: KeyModifiers) -> bool {
-    mods.is_empty() || mods == KeyModifiers::SHIFT
-}
 
 #[derive(Debug, Clone, Copy)]
 enum Priority {
@@ -80,16 +75,6 @@ impl StylingCommand {
     }
 }
 
-fn key_direction(key_code: KeyCode) -> Option<Direction> {
-    match key_code {
-        KeyCode::Char('h') | KeyCode::Char('H') => Some(Direction::Left),
-        KeyCode::Char('j') | KeyCode::Char('J') => Some(Direction::Down),
-        KeyCode::Char('k') | KeyCode::Char('K') => Some(Direction::Up),
-        KeyCode::Char('l') | KeyCode::Char('L') => Some(Direction::Right),
-        _ => None,
-    }
-}
-
 fn queue_style(stdout: &mut impl Write, style: &style::ContentStyle) -> Result<()> {
     if let Some(fg) = style.foreground_color {
         queue!(stdout, style::SetForegroundColor(fg))?;
@@ -125,7 +110,6 @@ pub struct HexView {
     bytes_per_line: usize,
     start_offset: usize,
     last_visible_rows: Cell<usize>,
-    use_half_cursor: bool,
     last_draw_time: time::Duration,
 
     state: State,
@@ -139,7 +123,6 @@ impl HexView {
             start_offset: 0,
             size: terminal::size().unwrap(),
             last_visible_rows: Cell::new(0),
-            use_half_cursor: false,
 
             last_draw_time: Default::default(),
 
@@ -242,7 +225,7 @@ impl HexView {
     fn visible_bytes(&self) -> Range<usize> {
         self.start_offset
             ..cmp::min(
-                self.data.len(),
+                self.buffer.data.len(),
                 self.start_offset + (self.size.1 - 1) as usize * self.bytes_per_line,
             )
     }
@@ -288,7 +271,10 @@ impl HexView {
 
     fn mark_commands(&self, visible: Range<usize>) -> Vec<StylingCommand> {
         let mut mark_commands = vec![StylingCommand::default(); visible.len()];
-        let mut selected_regions = self.selection.regions_in_range(visible.start, visible.end);
+        let mut selected_regions = self
+            .buffer
+            .selection
+            .regions_in_range(visible.start, visible.end);
         let mut command_stack = vec![self.default_style()];
         let start = visible.start;
 
@@ -317,7 +303,7 @@ impl HexView {
                 if selected_regions[0].caret == i {
                     let base_style = command_stack.last().unwrap().clone();
                     let mut caret_cmd = mark_commands[normalized].clone();
-                    if self.use_half_cursor {
+                    if self.state.has_half_cursor() {
                         if i == selected_regions[0].min() {
                             caret_cmd = caret_cmd
                                 .with_mid_style(self.caret_style())
@@ -381,22 +367,22 @@ impl HexView {
             style::PrintStyledContent(
                 style::style(format!(
                     " {} sels ({}) ",
-                    self.selection.len(),
-                    self.selection.main_selection + 1
+                    self.buffer.selection.len(),
+                    self.buffer.selection.main_selection + 1
                 ))
                 .with(Color::AnsiValue(16))
                 .on(Color::White)
             ),
             style::PrintStyledContent(style::style(RIGHTARROW).with(Color::White).on(Color::Blue)),
         )?;
-        if !self.data.is_empty() {
+        if !self.buffer.data.is_empty() {
             queue!(
                 stdout,
                 style::PrintStyledContent(
                     style::style(format!(
                         " {:x}/{:x} ",
-                        self.selection.main_cursor_offset(),
-                        self.data.len() - 1,
+                        self.buffer.selection.main_cursor_offset(),
+                        self.buffer.data.len() - 1,
                     ))
                     .with(Color::White)
                     .on(Color::Blue),
@@ -450,7 +436,7 @@ impl HexView {
     }
 
     fn draw_rows(&self, stdout: &mut impl Write, invalidated_rows: &HashSet<u16>) -> Result<()> {
-        if self.data.is_empty() {
+        if self.buffer.data.is_empty() {
             self.draw_empty(stdout)?;
             return Ok(());
         }
@@ -458,7 +444,7 @@ impl HexView {
         let start_index = visible_bytes.start;
         let end_index = visible_bytes.end;
 
-        let visible_bytes_cow = self.data.slice_to_cow(start_index..end_index);
+        let visible_bytes_cow = self.buffer.data.slice_to_cow(start_index..end_index);
 
         let max_bytes = end_index - start_index;
         let mark_commands = self.mark_commands(visible_bytes.clone());
@@ -483,7 +469,7 @@ impl HexView {
 
     fn draw(&self, stdout: &mut impl Write) -> Result<time::Duration> {
         let begin = time::Instant::now();
-        if self.data.is_empty() {
+        if self.buffer.data.is_empty() {
             self.draw_empty(stdout)?;
             return Ok(begin.elapsed());
         }
@@ -493,7 +479,7 @@ impl HexView {
         let visible_bytes = self.visible_bytes();
         let start_index = visible_bytes.start;
         let end_index = visible_bytes.end;
-        let visible_bytes_cow = self.data.slice_to_cow(start_index..end_index);
+        let visible_bytes_cow = self.buffer.data.slice_to_cow(start_index..end_index);
 
         let max_bytes = end_index - start_index;
         let mark_commands = self.mark_commands(visible_bytes.clone());
@@ -560,12 +546,12 @@ impl HexView {
     }
 
     fn maybe_update_offset(&mut self, stdout: &mut impl Write) -> Result<()> {
-        if self.data.is_empty() {
+        if self.buffer.data.is_empty() {
             self.start_offset = 0;
             return Ok(());
         }
 
-        let main_cursor_offset = self.selection.main_cursor_offset();
+        let main_cursor_offset = self.buffer.selection.main_cursor_offset();
         let visible_bytes = self.visible_bytes();
         let delta = if main_cursor_offset < visible_bytes.start {
             main_cursor_offset as isize - visible_bytes.start as isize
@@ -585,86 +571,72 @@ impl HexView {
         }
     }
 
-    fn apply_delta_no_cursor_update(
-        &mut self,
-        stdout: &mut impl Write,
-        delta: &RopeDelta,
-    ) -> Result<()> {
-        self.data = self.data.apply_delta(&delta);
-        self.maybe_update_offset(stdout)?;
+    fn maybe_update_offset_and_draw(&mut self, stdout: &mut impl Write) -> Result<()> {
+        if self.buffer.data.is_empty() {
+            self.start_offset = 0;
+            return Ok(());
+        }
+
+        let main_cursor_offset = self.buffer.selection.main_cursor_offset();
+        let visible_bytes = self.visible_bytes();
+        let delta = if main_cursor_offset < visible_bytes.start {
+            main_cursor_offset as isize - visible_bytes.start as isize
+        } else if main_cursor_offset >= visible_bytes.end {
+            main_cursor_offset as isize - (visible_bytes.end as isize - 1)
+        } else {
+            0
+        };
+        self.start_offset =
+            (self.start_offset as isize + delta * self.bytes_per_line as isize) as usize;
+
         self.draw(stdout)?;
         Ok(())
     }
 
+    fn transition_dirty_bytes(
+        &mut self,
+        stdout: &mut impl Write,
+        dirty_bytes: DirtyBytes,
+    ) -> Result<()> {
+        match dirty_bytes {
+            DirtyBytes::ChangeInPlace(intervals) => {
+                self.maybe_update_offset(stdout)?;
 
-    fn handle_insert_event_default(&mut self, stdout: &mut impl Write, evt: Event) -> Result<()> {
-        let (hex, before) = if let State::Insert { hex, before } = self.state {
-            (hex, before)
-        } else {
-            unreachable!()
-        };
-        match evt {
-            Event::Key(KeyEvent {
-                code: KeyCode::Char('o'),
-                modifiers,
-            }) if modifiers.contains(KeyModifiers::CONTROL) => {
-                self.state = State::Insert { hex: !hex, before }
+                let visible: Interval = self.visible_bytes().into();
+                let invalidated_rows = intervals
+                    .into_iter()
+                    .flat_map(|x| {
+                        let intersection = visible.intersect(x);
+                        if intersection.is_empty() {
+                            0..0
+                        } else {
+                            intersection.start..intersection.end
+                        }
+                    })
+                    .map(|byte| ((byte - self.start_offset) / self.bytes_per_line) as u16)
+                    .collect();
+
+                self.draw_rows(stdout, &invalidated_rows)
             }
-            Event::Key(KeyEvent {
-                code: KeyCode::Char('n'),
-                modifiers,
-            }) if modifiers.contains(KeyModifiers::CONTROL) => {
-                let inserted_bytes = vec![0];
-                let delta = insert(&self.data, &self.selection, inserted_bytes);
-                self.apply_delta(stdout, &delta)?;
-            }
-            Event::Key(KeyEvent {
-                code: KeyCode::Backspace,
-                ..
-            }) => {
-                if self.data.is_empty() {
-                    return Ok(());
-                }
-                let delta = backspace(&self.data, &self.selection);
-                self.apply_delta(stdout, &delta)?;
-            }
-            Event::Key(KeyEvent {
-                code: KeyCode::Delete,
-                ..
-            }) => {
-                if self.data.is_empty() {
-                    return Ok(());
-                }
-                let delta = delete_cursor(&self.data, &self.selection);
-                self.apply_delta(stdout, &delta)?;
-            }
-            Event::Key(KeyEvent {
-                code: KeyCode::Esc, ..
-            }) => {
-                self.state = State::Normal;
-            }
-            evt => self.handle_event_default(stdout, evt)?,
-        };
-        Ok(())
+            DirtyBytes::ChangeLength => self.maybe_update_offset_and_draw(stdout),
+        }
     }
 
-    fn handle_replace_event_default(&mut self, stdout: &mut impl Write, evt: Event) -> Result<()> {
-        match evt {
-            Event::Key(KeyEvent {
-                code: KeyCode::Char('n'),
-                modifiers,
-            }) if modifiers.contains(KeyModifiers::CONTROL) => {
-                let delta = replace(&self.data, &self.selection, 0u8);
-                self.apply_delta_no_cursor_update(stdout, &delta)?;
-                self.state = State::Normal;
+    fn transition(&mut self, stdout: &mut impl Write, transition: StateTransition) -> Result<()> {
+        match transition {
+            StateTransition::None => Ok(()),
+            StateTransition::DirtyBytes(dirty_bytes) => {
+                self.transition_dirty_bytes(stdout, dirty_bytes)
             }
-            Event::Key(KeyEvent { .. }) => {
-                // Unhandled keys should reset the state
-                self.state = State::Normal;
+            StateTransition::NewState(state) => {
+                self.state = state;
+                Ok(())
             }
-            evt => self.handle_event_default(stdout, evt)?,
-        };
-        Ok(())
+            StateTransition::StateAndDirtyBytes(state, dirty_bytes) => {
+                self.state = state;
+                self.transition_dirty_bytes(stdout, dirty_bytes)
+            }
+        }
     }
 
     pub fn run_event_loop(mut self, stdout: &mut impl Write) -> Result<()> {
@@ -680,158 +652,29 @@ impl HexView {
             }
             let evt = event::read()?;
             let transition = match self.state {
-                State::Normal => modes::normal::transition(&evt, &mut self.buffer, self.bytes_per_line),
-                State::Split => modes::split::transition(&evt, &mut self.buffer),
-,
-                State::JumpTo { extend } => match event::read()? {
-                    Event::Key(KeyEvent { code, .. }) if key_direction(code).is_some() => {
-                        let direction = key_direction(code).unwrap();
-                        let max_bytes = self.data.len();
-                        let bytes_per_line = self.bytes_per_line;
-                        let invalidated_rows = if extend {
-                            self.map_selections(|region| {
-                                vec![region.extend_to_boundary(
-                                    direction,
-                                    bytes_per_line,
-                                    max_bytes,
-                                )]
-                            })
-                        } else {
-                            self.map_selections(|region| {
-                                vec![region.jump_to_boundary(direction, bytes_per_line, max_bytes)]
-                            })
-                        };
-
-                        self.draw_rows(stdout, &invalidated_rows)?;
-                        self.maybe_update_offset(stdout)?;
-                        self.state = State::Normal;
-                    }
-                    Event::Key(_) => self.state = State::Normal,
-                    evt => self.handle_event_default(stdout, evt)?,
-                },
-                State::Insert { hex, .. } => match event::read()? {
-                    Event::Key(KeyEvent {
-                        code: KeyCode::Char(ch),
-                        modifiers,
-                    }) if !hex && is_normal_input_modifiers(modifiers) => {
-                        let mut inserted_bytes = vec![0u8; ch.len_utf8()];
-                        ch.encode_utf8(&mut inserted_bytes);
-
-                        // At this point `before` doesn't really matter;
-                        // the cursors will have been moved in normal mode to their
-                        // correct places.
-                        let delta = insert(&self.data, &self.selection, inserted_bytes);
-                        self.apply_delta(stdout, &delta)?;
-                    }
-                    Event::Key(KeyEvent {
-                        code: KeyCode::Char(ch),
-                        modifiers,
-                    }) if ch.is_ascii_hexdigit() && is_normal_input_modifiers(modifiers) => {
-                        let inserted = ch.to_digit(16).unwrap() << 4;
-                        let mut inserted_bytes = vec![inserted as u8];
-                        let insertion_delta =
-                            insert(&self.data, &self.selection, inserted_bytes.clone());
-                        self.use_half_cursor = true;
-                        self.selection
-                            .apply_delta_offset_carets(&insertion_delta, -1, 0);
-                        self.apply_delta_no_cursor_update(stdout, &insertion_delta)?;
-                        stdout.flush()?;
-
-                        self.use_half_cursor = false; // After next update, no more half cursor
-                        let next_key_event = loop {
-                            match event::read()? {
-                                k @ Event::Key(_) => break k,
-                                evt => self.handle_insert_event_default(stdout, evt)?,
-                            }
-                        };
-
-                        if let Event::Key(KeyEvent {
-                            code: KeyCode::Char(second_ch),
-                            modifiers,
-                        }) = next_key_event
-                        {
-                            if !second_ch.is_ascii_hexdigit()
-                                || !is_normal_input_modifiers(modifiers)
-                            {
-                                // The partial insertion will have extended our selection in the direction
-                                // of the cursor. Fix this up before doing anything.
-                                let bytes_per_line = self.bytes_per_line;
-                                let max_bytes = self.data.len();
-
-                                let invalidated_rows = self.map_selections(|region| {
-                                    vec![region.simple_extend(
-                                        Direction::Right,
-                                        bytes_per_line,
-                                        max_bytes,
-                                    )]
-                                });
-                                self.draw_rows(stdout, &invalidated_rows)?;
-
-                                self.handle_insert_event_default(stdout, next_key_event)?;
-                            } else {
-                                inserted_bytes[0] |= second_ch.to_digit(16).unwrap() as u8;
-                                let delta = change(&self.data, &self.selection, inserted_bytes);
-
-                                self.selection.apply_delta_offset_carets(&delta, 0, 0);
-                                self.apply_delta_no_cursor_update(stdout, &delta)?;
-                            }
-                        } else {
-                            // The partial insertion will have extended our selection in the direction
-                            // of the cursor. Fix this up before doing anything.
-                            let bytes_per_line = self.bytes_per_line;
-                            let max_bytes = self.data.len();
-
-                            let invalidated_rows = self.map_selections(|region| {
-                                vec![region.simple_extend(
-                                    Direction::Right,
-                                    bytes_per_line,
-                                    max_bytes,
-                                )]
-                            });
-                            self.draw_rows(stdout, &invalidated_rows)?;
-
-                            self.handle_insert_event_default(stdout, next_key_event)?;
-                        }
-                    }
-                    evt => self.handle_insert_event_default(stdout, evt)?,
-                },
-                State::Replace { hex, hex_half } => {
-                    match event::read()? {
-                        Event::Key(KeyEvent {
-                            code: KeyCode::Char(ch),
-                            modifiers,
-                        }) if !hex && is_normal_input_modifiers(modifiers) => {
-                            let delta = replace(&self.data, &self.selection, ch as u8); // lossy!
-                            self.apply_delta_no_cursor_update(stdout, &delta)?;
-                            self.state = State::Normal;
-                        }
-                        Event::Key(KeyEvent {
-                            code: KeyCode::Char(ch),
-                            modifiers,
-                        }) if hex
-                            && ch.is_ascii_hexdigit()
-                            && is_normal_input_modifiers(modifiers) =>
-                        {
-                            if let Some(half) = hex_half {
-                                let delta = replace(
-                                    &self.data,
-                                    &self.selection,
-                                    half | ch.to_digit(16).unwrap() as u8,
-                                );
-                                self.apply_delta_no_cursor_update(stdout, &delta)?;
-                                self.state = State::Normal;
-                            } else {
-                                let replacing_ch = (ch.to_digit(16).unwrap() as u8) << 4;
-                                self.state = State::Replace {
-                                    hex,
-                                    hex_half: Some(replacing_ch),
-                                };
-                            }
-                        }
-                        evt => self.handle_replace_event_default(stdout, evt)?,
-                    }
+                State::Quitting => break,
+                State::Normal => {
+                    modes::normal::transition(&evt, &mut self.buffer, self.bytes_per_line)
                 }
+                State::Split => modes::split::transition(&evt, &mut self.buffer),
+                State::JumpTo { extend } => {
+                    modes::jumpto::transition(&evt, &mut self.buffer, extend, self.bytes_per_line)
+                }
+                State::Insert {
+                    hex,
+                    before,
+                    hex_half,
+                } => modes::insert::transition(&evt, &mut self.buffer, before, hex, hex_half),
+                State::Replace { hex, hex_half } => {
+                    modes::replace::transition(&evt, &mut self.buffer, hex, hex_half)
+                }
+            };
+            if let Some(transition) = transition {
+                self.transition(stdout, transition)?;
+            } else {
+                self.handle_event_default(stdout, evt)?;
             }
+
             self.draw_statusline(stdout)?;
             stdout.flush()?;
         }

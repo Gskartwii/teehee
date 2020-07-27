@@ -5,10 +5,19 @@ use xi_rope::Interval;
 pub enum State {
     Quitting,
     Normal,
-    JumpTo { extend: bool },
+    JumpTo {
+        extend: bool,
+    },
     Split,
-    Insert { before: bool, hex: bool },
-    Replace { hex: bool, hex_half: Option<u8> },
+    Insert {
+        before: bool,
+        hex: bool,
+        hex_half: Option<u8>,
+    },
+    Replace {
+        hex: bool,
+        hex_half: Option<u8>,
+    },
 }
 
 impl State {
@@ -22,18 +31,22 @@ impl State {
             State::Insert {
                 before: true,
                 hex: true,
+                ..
             } => "INSERT (hex)".into(),
             State::Insert {
                 before: true,
                 hex: false,
+                ..
             } => "INSERT (ascii)".into(),
             State::Insert {
                 before: false,
                 hex: true,
+                ..
             } => "APPEND (hex)".into(),
             State::Insert {
                 before: false,
                 hex: false,
+                ..
             } => "APPEND (ascii)".into(),
             State::Replace {
                 hex: true,
@@ -48,13 +61,21 @@ impl State {
     }
 
     pub fn takes_input(&self) -> bool {
-       	self != &State::Quitting
+        self != &State::Quitting
+    }
+
+    pub fn has_half_cursor(&self) -> bool {
+        match self {
+            State::Insert {
+                hex_half: Some(_), ..
+            } => true,
+            _ => false,
+        }
     }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum DirtyBytes {
-    None,
     ChangeInPlace(Vec<Interval>),
     ChangeLength,
 }

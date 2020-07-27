@@ -6,9 +6,7 @@ use super::keymap::*;
 use super::selection::*;
 use super::state::*;
 
-use crossterm::{
-    event::{Event, KeyCode, KeyEvent, KeyModifiers},
-};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 
 use lazy_static::lazy_static;
 
@@ -17,8 +15,8 @@ enum Action {
     Width(usize),
 }
 
-fn default_split_maps() -> KeyMap<Action> {
-    KeyMap{
+fn default_maps() -> KeyMap<Action> {
+    KeyMap {
         maps: keys!(
             ('b' => Action::Width(1)),
             ('w' => Action::Width(2)),
@@ -30,14 +28,15 @@ fn default_split_maps() -> KeyMap<Action> {
 }
 
 lazy_static! {
-    static ref DEFAULT_SPLIT_MAPS: KeyMap<Action> = default_split_maps();
+    static ref DEFAULT_MAPS: KeyMap<Action> = default_maps();
 }
 
 pub fn transition(evt: &Event, buffer: &mut Buffer) -> Option<StateTransition> {
-    if let Some(action) = DEFAULT_SPLIT_MAPS.event_to_action(evt) {
+    if let Some(action) = DEFAULT_MAPS.event_to_action(evt) {
         Some(match action {
-            Action::Width(width) => {
-                StateTransition::StateAndDirtyBytes(State::Normal, buffer.map_selections(|region| {
+            Action::Width(width) => StateTransition::StateAndDirtyBytes(
+                State::Normal,
+                buffer.map_selections(|region| {
                     (region.min()..=region.max())
                         .step_by(width)
                         .map(|pos| {
@@ -45,11 +44,11 @@ pub fn transition(evt: &Event, buffer: &mut Buffer) -> Option<StateTransition> {
                                 .with_direction(region.backward())
                         })
                         .collect()
-                }))
-            }
+                }),
+            ),
         })
     } else if let Event::Key(_) = evt {
-		Some(StateTransition::NewState(State::Normal))
+        Some(StateTransition::NewState(State::Normal))
     } else {
         None
     }

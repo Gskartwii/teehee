@@ -1,8 +1,6 @@
 use std::collections::HashMap;
 
-use crossterm::{
-    event::{Event, KeyCode, KeyEvent, KeyModifiers},
-};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use lazy_static::lazy_static;
 
 use super::buffer::*;
@@ -13,30 +11,29 @@ use super::state::*;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 enum Action {
-	Quit,
-	Move(Direction),
-	Extend(Direction),
-	SplitMode,
-	JumpToMode,
-	ExtendToMode,
-	SwapCaret,
-	CollapseSelection,
-	Delete{register: char},
-	Yank{register: char},
-	Paste{after: bool, register: char},
-	Change{hex: bool, register: char},
-	Insert{hex: bool},
-	Append{hex: bool},
-	RemoveMain,
-	RetainMain,
-	SelectPrev,
-	SelectNext,
-	SelectAll,
-	ReplaceMode{hex: bool},
+    Quit,
+    Move(Direction),
+    Extend(Direction),
+    SplitMode,
+    JumpToMode,
+    ExtendToMode,
+    SwapCaret,
+    CollapseSelection,
+    Delete { register: char },
+    Yank { register: char },
+    Paste { after: bool, register: char },
+    Change { hex: bool, register: char },
+    Insert { hex: bool },
+    Append { hex: bool },
+    RemoveMain,
+    RetainMain,
+    SelectPrev,
+    SelectNext,
+    SelectAll,
+    ReplaceMode { hex: bool },
 }
 
-
-fn default_normal_mode_maps() -> KeyMap<Action> {
+fn default_maps() -> KeyMap<Action> {
     KeyMap {
         maps: keys!(
             (key KeyCode::Esc => Action::Quit),
@@ -77,73 +74,101 @@ fn default_normal_mode_maps() -> KeyMap<Action> {
 }
 
 lazy_static! {
-    static ref DEFAULT_NORMAL_MODE_MAPS: KeyMap<Action> = default_normal_mode_maps();
+    static ref DEFAULT_MAPS: KeyMap<Action> = default_maps();
 }
 
-pub fn transition(event: &Event, buffer: &mut Buffer, bytes_per_line: usize) -> Option<StateTransition> {
-    if let Some(action) = DEFAULT_NORMAL_MODE_MAPS.event_to_action(event) {
+pub fn transition(
+    event: &Event,
+    buffer: &mut Buffer,
+    bytes_per_line: usize,
+) -> Option<StateTransition> {
+    if let Some(action) = DEFAULT_MAPS.event_to_action(event) {
         Some(match action {
             Action::Quit => StateTransition::NewState(State::Quitting),
-            Action::JumpToMode => StateTransition::NewState(State::JumpTo{ extend: false }),
-            Action::ExtendToMode => StateTransition::NewState(State::JumpTo{ extend: true }),
+            Action::JumpToMode => StateTransition::NewState(State::JumpTo { extend: false }),
+            Action::ExtendToMode => StateTransition::NewState(State::JumpTo { extend: true }),
             Action::SplitMode => StateTransition::NewState(State::Split),
-            Action::Insert{hex} => StateTransition::NewState(State::Insert{hex, before: true}),
-            Action::Append{hex} => StateTransition::NewState(State::Insert{hex, before: false}),
-            Action::ReplaceMode{hex} => StateTransition::NewState(State::Replace{hex, hex_half: None}),
+            Action::Insert { hex } => StateTransition::StateAndDirtyBytes(
+                State::Insert {
+                    hex,
+                    before: true,
+                    hex_half: None,
+                },
+                buffer.map_selections(|region| vec![region.to_backward()]),
+            ),
+            Action::Append { hex } => StateTransition::StateAndDirtyBytes(
+                State::Insert {
+                    hex,
+                    before: false,
+                    hex_half: None,
+                },
+                {
+                    let max_size = buffer.data.len();
+                    buffer.map_selections(|region| {
+                        vec![region.to_forward().simple_extend(
+                            Direction::Right,
+                            bytes_per_line,
+                            max_size,
+                        )]
+                    })
+                },
+            ),
+            Action::ReplaceMode { hex } => StateTransition::NewState(State::Replace {
+                hex,
+                hex_half: None,
+            }),
             Action::Move(direction) => {
                 let max_bytes = buffer.data.len();
-                StateTransition::DirtyBytes(
-                    buffer.map_selections(|region| {
-                        vec![region.simple_move(direction, bytes_per_line, max_bytes)]
-                    }),
-                )
-            },
+                StateTransition::DirtyBytes(buffer.map_selections(|region| {
+                    vec![region.simple_move(direction, bytes_per_line, max_bytes)]
+                }))
+            }
             Action::Extend(direction) => {
                 let max_bytes = buffer.data.len();
-                StateTransition::DirtyBytes(
-                    buffer.map_selections(|region| {
-                        vec![region.simple_extend(direction, bytes_per_line, max_bytes)]
-                    }),
-                )
-            },
+                StateTransition::DirtyBytes(buffer.map_selections(|region| {
+                    vec![region.simple_extend(direction, bytes_per_line, max_bytes)]
+                }))
+            }
             Action::SwapCaret => StateTransition::DirtyBytes(
-                buffer.map_selections(|region| {
-                    vec![region.swap_caret()]
-                }),
+                buffer.map_selections(|region| vec![region.swap_caret()]),
             ),
-            Action::CollapseSelection => StateTransition::DirtyBytes(
-                buffer.map_selections(|region| {
-                    vec![region.collapse()]
-                }),
-            ),
-            Action::Delete{register} => {
+            Action::CollapseSelection => {
+                StateTransition::DirtyBytes(buffer.map_selections(|region| vec![region.collapse()]))
+            }
+            Action::Delete { register } => {
                 buffer.yank_selections(register);
                 if !buffer.data.is_empty() {
                     let delta = ops::deletion(&buffer.data, &buffer.selection);
-                    StateTransition::DirtyBytes(
-                        buffer.apply_delta(&delta),
-                    )
+                    StateTransition::DirtyBytes(buffer.apply_delta(&delta))
                 } else {
-					StateTransition::None
+                    StateTransition::None
                 }
-            },
-            Action::Change{hex, register} => {
+            }
+            Action::Change { hex, register } => {
                 buffer.yank_selections(register);
                 if !buffer.data.is_empty() {
                     let delta = ops::deletion(&buffer.data, &buffer.selection);
                     StateTransition::StateAndDirtyBytes(
-                        State::Insert{hex, before: true},
+                        State::Insert {
+                            hex,
+                            before: true,
+                            hex_half: None,
+                        },
                         buffer.apply_delta(&delta),
                     )
                 } else {
-					StateTransition::NewState(State::Insert{hex, before: true})
+                    StateTransition::NewState(State::Insert {
+                        hex,
+                        before: true,
+                        hex_half: None,
+                    })
                 }
-            },
-            Action::Yank{register} => {
+            }
+            Action::Yank { register } => {
                 buffer.yank_selections(register);
                 StateTransition::None
-            },
-            Action::Paste{register, after} => {
+            }
+            Action::Paste { register, after } => {
                 let delta = ops::paste(
                     &buffer.data,
                     &buffer.selection,
@@ -151,27 +176,17 @@ pub fn transition(event: &Event, buffer: &mut Buffer, bytes_per_line: usize) -> 
                     after,
                 );
                 StateTransition::DirtyBytes(buffer.apply_delta(&delta))
-            },
-            Action::RemoveMain => StateTransition::DirtyBytes(
-                buffer.remove_main_sel()
-            ),
-            Action::RetainMain => StateTransition::DirtyBytes(
-                buffer.retain_main_sel()
-            ),
-            Action::SelectNext => StateTransition::DirtyBytes(
-                buffer.select_next()
-            ),
-            Action::SelectPrev => StateTransition::DirtyBytes(
-                buffer.select_prev()
-            ),
+            }
+            Action::RemoveMain => StateTransition::DirtyBytes(buffer.remove_main_sel()),
+            Action::RetainMain => StateTransition::DirtyBytes(buffer.retain_main_sel()),
+            Action::SelectNext => StateTransition::DirtyBytes(buffer.select_next()),
+            Action::SelectPrev => StateTransition::DirtyBytes(buffer.select_prev()),
             Action::SelectAll => {
                 buffer.selection.select_all(buffer.data.len());
-                StateTransition::DirtyBytes(
-                    DirtyBytes::ChangeInPlace(vec![
-                        (0..buffer.data.len()).into()
-                    ])
-                )
-            },
+                StateTransition::DirtyBytes(DirtyBytes::ChangeInPlace(vec![
+                    (0..buffer.data.len()).into()
+                ]))
+            }
         })
     } else {
         None

@@ -358,6 +358,6 @@ impl SelRegion {
 
 impl Into<Interval> for SelRegion {
     fn into(self) -> Interval {
-		(self.min()..=self.max()).into()
+        (self.min()..=self.max()).into()
     }
 }

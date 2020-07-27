@@ -41,7 +41,7 @@ impl Buffer {
             }
             let last = disjoint_invalidated_ranges.last().unwrap();
             if last.contains(r.start) {
-                disjoint_invalidated_ranges[disjoint_invalidated_ranges.len() - 1] = last.union(r);
+                *disjoint_invalidated_ranges.last_mut().unwrap() = last.union(r);
                 continue;
             }
             disjoint_invalidated_ranges.push(r);
@@ -51,6 +51,19 @@ impl Buffer {
 
     pub fn apply_delta(&mut self, delta: &RopeDelta) -> DirtyBytes {
         self.selection.apply_delta(&delta);
+        self.data = self.data.apply_delta(&delta);
+
+        DirtyBytes::ChangeLength
+    }
+
+    pub fn apply_delta_offset_carets(
+        &mut self,
+        delta: &RopeDelta,
+        caret_offset: isize,
+        tail_offset: isize,
+    ) -> DirtyBytes {
+        self.selection
+            .apply_delta_offset_carets(delta, caret_offset, tail_offset);
         self.data = self.data.apply_delta(&delta);
 
         DirtyBytes::ChangeLength
