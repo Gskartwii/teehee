@@ -1,8 +1,14 @@
 [package]
 name = "teehee"
+description = "Hex editor with inspiration from Vim, Kakoune and Hiew"
 version = "0.1.0"
 authors = ["Gskartwii <ahannula4@gmail.com>"]
+license = "Apache-2.0"
 edition = "2018"
+readme = "README.md"
+repository = "https://github.com/Gskartwii/teehee"
+keywords = ["cli", "terminal", "editor"]
+categories = ["command-line-utilities"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
