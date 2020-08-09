@@ -32,6 +32,14 @@ impl Selection {
         self.main_selection = 0;
     }
 
+    pub fn bounds(&self) -> Interval {
+        (self.regions[0].min()..=self.regions.last().unwrap().max()).into()
+    }
+
+    pub fn len_bytes(&self) -> usize {
+        self.regions.iter().map(SelRegion::len).sum()
+    }
+
     pub fn retain_main(&mut self) {
         let main = self.regions[self.main_selection];
         self.main_selection = 0;
@@ -223,6 +231,10 @@ impl SelRegion {
         cmp::min(self.caret, self.tail)
     }
 
+    pub fn len(&self) -> usize {
+        self.max() - self.min() + 1
+    }
+
     pub fn overlaps(&self, other: &SelRegion) -> bool {
         self.max() >= other.min()
     }
@@ -353,6 +365,37 @@ impl SelRegion {
             ),
             _ => panic!("Can't merge selections going in different directions"),
         }
+    }
+
+    fn inherit_direction(&self, parent: &SelRegion) -> SelRegion {
+        if parent.forward() {
+            self.to_forward()
+        } else {
+            self.to_backward()
+        }
+    }
+
+    pub fn split_at(&self, pos: usize) -> (Option<SelRegion>, Option<SelRegion>) {
+        if pos == self.min() {
+            if self.min() == self.max() {
+                return (None, None);
+            }
+
+            return (
+                None,
+                Some(SelRegion::new(self.min() + 1, self.max()).inherit_direction(self)),
+            );
+        }
+        if pos == self.max() {
+            return (
+                Some(SelRegion::new(self.min(), self.max() - 1).inherit_direction(self)),
+                None,
+            );
+        }
+        (
+            Some(SelRegion::new(self.min(), pos - 1)),
+            Some(SelRegion::new(pos + 1, self.max())),
+        )
     }
 }
 
