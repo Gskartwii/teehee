@@ -241,7 +241,7 @@ impl HexView {
     fn active_selection_style(&self) -> PrioritizedStyle {
         PrioritizedStyle {
             style: style::ContentStyle::new()
-                .foreground(style::Color::Grey)
+                .foreground(style::Color::Black)
                 .background(style::Color::DarkYellow),
             priority: Priority::Selection,
         }
@@ -249,7 +249,7 @@ impl HexView {
     fn inactive_selection_style(&self) -> PrioritizedStyle {
         PrioritizedStyle {
             style: style::ContentStyle::new()
-                .foreground(style::Color::Grey)
+                .foreground(style::Color::Black)
                 .background(style::Color::DarkGrey),
             priority: Priority::Selection,
         }
