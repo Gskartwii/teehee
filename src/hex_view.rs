@@ -656,7 +656,7 @@ impl HexView {
                 State::Normal => {
                     modes::normal::transition(&evt, &mut self.buffer, self.bytes_per_line)
                 }
-                State::Split => modes::split::transition(&evt, &mut self.buffer),
+                State::Split { count } => modes::split::transition(&evt, &mut self.buffer, count),
                 State::JumpTo { extend } => {
                     modes::jumpto::transition(&evt, &mut self.buffer, extend, self.bytes_per_line)
                 }

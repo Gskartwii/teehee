@@ -87,7 +87,7 @@ pub fn transition(
             Action::Quit => StateTransition::NewState(State::Quitting),
             Action::JumpToMode => StateTransition::NewState(State::JumpTo { extend: false }),
             Action::ExtendToMode => StateTransition::NewState(State::JumpTo { extend: true }),
-            Action::SplitMode => StateTransition::NewState(State::Split),
+            Action::SplitMode => StateTransition::NewState(State::Split { count: None }),
             Action::Insert { hex } => StateTransition::StateAndDirtyBytes(
                 State::Insert {
                     hex,

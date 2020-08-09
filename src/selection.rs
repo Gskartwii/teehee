@@ -32,10 +32,6 @@ impl Selection {
         self.main_selection = 0;
     }
 
-    pub fn bounds(&self) -> Interval {
-        (self.regions[0].min()..=self.regions.last().unwrap().max()).into()
-    }
-
     pub fn len_bytes(&self) -> usize {
         self.regions.iter().map(SelRegion::len).sum()
     }
@@ -375,26 +371,30 @@ impl SelRegion {
         }
     }
 
-    pub fn split_at(&self, pos: usize) -> (Option<SelRegion>, Option<SelRegion>) {
-        if pos == self.min() {
-            if self.min() == self.max() {
+    pub fn split_at_region(
+        &self,
+        start: usize,
+        end: usize,
+    ) -> (Option<SelRegion>, Option<SelRegion>) {
+        if start <= self.min() {
+            if end >= self.max() {
                 return (None, None);
             }
 
             return (
                 None,
-                Some(SelRegion::new(self.min() + 1, self.max()).inherit_direction(self)),
+                Some(SelRegion::new(end + 1, self.max()).inherit_direction(self)),
             );
         }
-        if pos == self.max() {
+        if end >= self.max() {
             return (
-                Some(SelRegion::new(self.min(), self.max() - 1).inherit_direction(self)),
+                Some(SelRegion::new(self.min(), start - 1).inherit_direction(self)),
                 None,
             );
         }
         (
-            Some(SelRegion::new(self.min(), pos - 1)),
-            Some(SelRegion::new(pos + 1, self.max())),
+            Some(SelRegion::new(self.min(), start - 1)),
+            Some(SelRegion::new(end + 1, self.max())),
         )
     }
 }

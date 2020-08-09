@@ -8,7 +8,9 @@ pub enum State {
     JumpTo {
         extend: bool,
     },
-    Split,
+    Split {
+        count: Option<usize>,
+    },
     Insert {
         before: bool,
         hex: bool,
@@ -27,7 +29,8 @@ impl State {
             State::Normal => "NORMAL".into(),
             State::JumpTo { extend: true } => "EXTEND".into(),
             State::JumpTo { extend: false } => "JUMP".into(),
-            State::Split => "SPLIT".into(),
+            State::Split { count: None } => "SPLIT".into(),
+            State::Split { count: Some(cnt) } => format!("SPLIT ({})", cnt).into(),
             State::Insert {
                 before: true,
                 hex: true,
