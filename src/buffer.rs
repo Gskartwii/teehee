@@ -76,11 +76,19 @@ impl Buffer {
         DirtyBytes::ChangeInPlace(vec![old_main_sel_interval, new_main_sel_interval])
     }
 
+    fn modify_sels_in_place(&mut self, f: impl FnOnce(&mut Selection)) -> DirtyBytes {
+        let dirty =
+            DirtyBytes::ChangeInPlace(self.selection.iter().copied().map(Into::into).collect());
+        f(&mut self.selection);
+
+        dirty
+    }
+
     pub fn remove_main_sel(&mut self) -> DirtyBytes {
         self.switch_main_sel(Selection::remove_main)
     }
     pub fn retain_main_sel(&mut self) -> DirtyBytes {
-        self.switch_main_sel(Selection::retain_main)
+        self.modify_sels_in_place(Selection::retain_main)
     }
     pub fn select_next(&mut self) -> DirtyBytes {
         self.switch_main_sel(Selection::select_next)
