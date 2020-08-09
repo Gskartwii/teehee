@@ -22,7 +22,7 @@ use super::state::*;
 use std::io::Write;
 
 const VERTICAL: &str = "│";
-const RIGHTARROW: &str = "";
+const LEFTARROW: &str = "";
 
 #[derive(Debug, Clone, Copy)]
 enum Priority {
@@ -349,20 +349,44 @@ impl HexView {
         mark_commands
     }
 
-    fn draw_statusline(&self, stdout: &mut impl Write) -> Result<()> {
+    fn calculate_powerline_length(&self) -> usize {
+        let mut length = 0;
+        length += 1; // leftarrow
+        length += 2 + self.state.name().len();
+        length += 1; // leftarrow
+        length += format!(
+            " {} sels ({}) ",
+            self.buffer.selection.len(),
+            self.buffer.selection.main_selection + 1
+        )
+        .len();
+        length += 1; // leftarrow
+        if !self.buffer.data.is_empty() {
+            length += format!(
+                " {:x}/{:x} ",
+                self.buffer.selection.main_cursor_offset(),
+                self.buffer.data.len() - 1
+            )
+            .len();
+        } else {
+            length += " empty ".len();
+        }
+        length
+    }
+
+    fn draw_statusline_here(&self, stdout: &mut impl Write) -> Result<()> {
         queue!(
             stdout,
-            cursor::MoveTo(0, self.size.1),
-            terminal::Clear(terminal::ClearType::CurrentLine),
+            style::PrintStyledContent(style::style(LEFTARROW).with(Color::DarkYellow)),
             style::PrintStyledContent(
                 style::style(format!(" {} ", self.state.name()))
                     .with(Color::AnsiValue(16))
                     .on(Color::DarkYellow)
             ),
             style::PrintStyledContent(
-                style::style(RIGHTARROW)
-                    .with(Color::DarkYellow)
-                    .on(Color::White)
+                style::style(LEFTARROW)
+                    .with(Color::White)
+                    .on(Color::DarkYellow)
             ),
             style::PrintStyledContent(
                 style::style(format!(
@@ -373,11 +397,13 @@ impl HexView {
                 .with(Color::AnsiValue(16))
                 .on(Color::White)
             ),
-            style::PrintStyledContent(style::style(RIGHTARROW).with(Color::White).on(Color::Blue)),
         )?;
         if !self.buffer.data.is_empty() {
             queue!(
                 stdout,
+                style::PrintStyledContent(
+                    style::style(LEFTARROW).with(Color::Blue).on(Color::White)
+                ),
                 style::PrintStyledContent(
                     style::style(format!(
                         " {:x}/{:x} ",
@@ -387,24 +413,29 @@ impl HexView {
                     .with(Color::White)
                     .on(Color::Blue),
                 ),
-                style::PrintStyledContent(style::style(RIGHTARROW).with(Color::Blue))
             )?;
         } else {
             queue!(
                 stdout,
                 style::PrintStyledContent(
+                    style::style(LEFTARROW).with(Color::Blue).on(Color::White)
+                ),
+                style::PrintStyledContent(
                     style::style(" empty ").with(Color::White).on(Color::Blue),
                 ),
-                style::PrintStyledContent(style::style(RIGHTARROW).with(Color::Blue))
             )?;
         }
+        Ok(())
+    }
+
+    fn draw_statusline(&self, stdout: &mut impl Write) -> Result<()> {
+        let line_length = self.calculate_powerline_length();
         queue!(
             stdout,
-            style::Print(format!(
-                " -- debug: draw time {} ms",
-                self.last_draw_time.as_millis()
-            )),
+            cursor::MoveTo(self.size.0 - line_length as u16, self.size.1),
+            terminal::Clear(terminal::ClearType::CurrentLine),
         )?;
+        self.draw_statusline_here(stdout)?;
         Ok(())
     }
 
