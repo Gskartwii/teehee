@@ -110,6 +110,7 @@ pub struct HexView {
     bytes_per_line: usize,
     start_offset: usize,
     last_visible_rows: Cell<usize>,
+    last_powerline_len: Cell<usize>,
     last_draw_time: time::Duration,
 
     state: State,
@@ -123,6 +124,7 @@ impl HexView {
             start_offset: 0,
             size: terminal::size().unwrap(),
             last_visible_rows: Cell::new(0),
+            last_powerline_len: Cell::new(0),
 
             last_draw_time: Default::default(),
 
@@ -430,11 +432,22 @@ impl HexView {
 
     fn draw_statusline(&self, stdout: &mut impl Write) -> Result<()> {
         let line_length = self.calculate_powerline_length();
-        queue!(
-            stdout,
-            cursor::MoveTo(self.size.0 - line_length as u16, self.size.1),
-            terminal::Clear(terminal::ClearType::CurrentLine),
-        )?;
+        let last_length = self.last_powerline_len.get();
+        if line_length < last_length {
+            let delta = last_length - line_length;
+            queue!(
+                stdout,
+                cursor::MoveTo(self.size.0 - last_length as u16, self.size.1),
+                style::Print(make_padding(delta)),
+            )?;
+        } else {
+            queue!(
+                stdout,
+                cursor::MoveTo(self.size.0 - line_length as u16, self.size.1),
+            )?;
+        }
+        self.last_powerline_len.set(line_length);
+
         self.draw_statusline_here(stdout)?;
         Ok(())
     }
@@ -557,7 +570,14 @@ impl HexView {
             self.draw(stdout)?;
             Ok(())
         } else {
-            queue!(stdout, terminal::ScrollUp(line_count as u16))?;
+            queue!(
+                stdout,
+                terminal::ScrollUp(line_count as u16),
+                // important: first scroll, then clear the line
+                // I don't know why, but this prevents flashing on the statusline
+                cursor::MoveTo(0, self.size.1 - 2),
+                terminal::Clear(terminal::ClearType::CurrentLine),
+            )?;
             let invalidated_rows =
                 (self.size.1 - 1 - line_count as u16..=self.size.1 - 2).collect();
             self.draw_rows(stdout, &invalidated_rows) // -1 is statusline
@@ -570,7 +590,12 @@ impl HexView {
             self.draw(stdout)?;
             Ok(())
         } else {
-            queue!(stdout, terminal::ScrollDown(line_count as u16))?;
+            queue!(
+                stdout,
+                terminal::ScrollDown(line_count as u16),
+                cursor::MoveTo(0, self.size.1 - 1),
+                terminal::Clear(terminal::ClearType::CurrentLine),
+            )?;
             let invalidated_rows = (0..line_count as u16).collect();
             self.draw_rows(stdout, &invalidated_rows) // -1 is statusline
         }
@@ -608,17 +633,16 @@ impl HexView {
             return Ok(());
         }
 
-        let main_cursor_offset = self.buffer.selection.main_cursor_offset();
+        let main_cursor_offset = dbg!(self.buffer.selection.main_cursor_offset());
         let visible_bytes = self.visible_bytes();
-        let delta = if main_cursor_offset < visible_bytes.start {
-            main_cursor_offset as isize - visible_bytes.start as isize
+        if main_cursor_offset < visible_bytes.start {
+            self.start_offset = main_cursor_offset - main_cursor_offset % self.bytes_per_line;
         } else if main_cursor_offset >= visible_bytes.end {
-            main_cursor_offset as isize - (visible_bytes.end as isize - 1)
-        } else {
-            0
-        };
-        self.start_offset =
-            (self.start_offset as isize + delta * self.bytes_per_line as isize) as usize;
+            let bytes_per_screen = self.size.1 as usize * self.bytes_per_line;
+            self.start_offset = (main_cursor_offset - main_cursor_offset % self.bytes_per_line
+                + self.bytes_per_line)
+                .saturating_sub(bytes_per_screen);
+        }
 
         self.draw(stdout)?;
         Ok(())
