@@ -630,6 +630,7 @@ impl HexView {
     fn maybe_update_offset_and_draw(&mut self, stdout: &mut impl Write) -> Result<()> {
         if self.buffer.data.is_empty() {
             self.start_offset = 0;
+            self.draw_empty(stdout)?;
             return Ok(());
         }
 
