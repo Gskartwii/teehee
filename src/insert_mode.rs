@@ -1,13 +1,22 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
 
 use super::buffer::*;
 use super::keymap::*;
+use super::modes::normal::Normal;
 use super::operations as ops;
 use super::state::*;
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 
 use lazy_static::lazy_static;
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub struct Insert {
+    pub before: bool,
+    pub hex: bool,
+    pub hex_half: Option<u8>,
+}
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 enum Action {
@@ -34,7 +43,7 @@ lazy_static! {
     static ref DEFAULT_MAPS: KeyMap<Action> = default_maps();
 }
 
-fn transition_ascii_insertion(key: char, buffer: &mut Buffer) -> StateTransition {
+fn transition_ascii_insertion(key: char, buffer: &mut Buffer) -> ModeTransition {
     let mut inserted_bytes = vec![0u8; key.len_utf8()];
     key.encode_utf8(&mut inserted_bytes);
 
@@ -42,7 +51,7 @@ fn transition_ascii_insertion(key: char, buffer: &mut Buffer) -> StateTransition
     // the cursors will have been moved in normal mode to their
     // correct places.
     let delta = ops::insert(&buffer.data, &buffer.selection, inserted_bytes);
-    StateTransition::DirtyBytes(buffer.apply_delta(&delta))
+    ModeTransition::DirtyBytes(buffer.apply_delta(&delta))
 }
 
 fn transition_hex_insertion(
@@ -50,7 +59,7 @@ fn transition_hex_insertion(
     buffer: &mut Buffer,
     before: bool,
     hex_half: Option<u8>,
-) -> Option<StateTransition> {
+) -> Option<ModeTransition> {
     if !key.is_ascii_hexdigit() {
         return None;
     }
@@ -61,8 +70,8 @@ fn transition_hex_insertion(
 
     if insert_half {
         let delta = ops::insert(&buffer.data, &buffer.selection, vec![to_insert]);
-        Some(StateTransition::StateAndDirtyBytes(
-            State::Insert {
+        Some(ModeTransition::new_mode_and_dirty(
+            Insert {
                 before,
                 hex: true,
                 hex_half: Some(to_insert),
@@ -71,8 +80,8 @@ fn transition_hex_insertion(
         ))
     } else {
         let delta = ops::change(&buffer.data, &buffer.selection, vec![to_insert]);
-        Some(StateTransition::StateAndDirtyBytes(
-            State::Insert {
+        Some(ModeTransition::new_mode_and_dirty(
+            Insert {
                 before,
                 hex: true,
                 hex_half: None,
@@ -82,56 +91,63 @@ fn transition_hex_insertion(
     }
 }
 
-pub fn transition(
-    evt: &Event,
-    buffer: &mut Buffer,
-    before: bool,
-    hex: bool,
-    hex_half: Option<u8>,
-) -> Option<StateTransition> {
-    if let Some(action) = DEFAULT_MAPS.event_to_action(evt) {
-        Some(match action {
-            Action::Exit => StateTransition::NewState(State::Normal),
-            Action::InsertNull => {
-                let inserted_bytes = vec![0];
-                let delta = ops::insert(&buffer.data, &buffer.selection, inserted_bytes);
-                StateTransition::DirtyBytes(buffer.apply_delta(&delta))
-            }
-            Action::SwitchInputMode => StateTransition::NewState(State::Insert {
-                before,
-                hex: !hex,
-                hex_half: None,
-            }),
-            Action::RemoveLast => {
-                if buffer.data.is_empty() {
-                    return Some(StateTransition::None);
-                }
-                let delta = ops::backspace(&buffer.data, &buffer.selection);
-                StateTransition::DirtyBytes(buffer.apply_delta(&delta))
-            }
-            Action::RemoveThis => {
-                if buffer.data.is_empty() {
-                    return Some(StateTransition::None);
-                }
-                let delta = ops::delete_cursor(&buffer.data, &buffer.selection);
-                StateTransition::DirtyBytes(buffer.apply_delta(&delta))
-            }
-        })
-    } else if let Event::Key(KeyEvent {
-        code: KeyCode::Char(key),
-        modifiers,
-    }) = evt
-    {
-        if !(*modifiers & !KeyModifiers::SHIFT).is_empty() {
-            return None;
+impl Mode for Insert {
+    fn name(&self) -> Cow<str> {
+        match (self.before, self.hex) {
+            (true, true) => "INSERT (hex)".into(),
+            (true, false) => "INSERT (ascii)".into(),
+            (false, true) => "APPEND (hex)".into(),
+            (false, false) => "APPEND (ascii)".into(),
         }
+    }
+    fn has_half_cursor(&self) -> bool {
+        self.hex_half.is_some()
+    }
+    fn transition(&self, evt: &Event, buffer: &mut Buffer, _: usize) -> Option<ModeTransition> {
+        if let Some(action) = DEFAULT_MAPS.event_to_action(evt) {
+            Some(match action {
+                Action::Exit => ModeTransition::new_mode(Normal()),
+                Action::InsertNull => {
+                    let inserted_bytes = vec![0];
+                    let delta = ops::insert(&buffer.data, &buffer.selection, inserted_bytes);
+                    ModeTransition::DirtyBytes(buffer.apply_delta(&delta))
+                }
+                Action::SwitchInputMode => ModeTransition::new_mode(Insert {
+                    before: self.before,
+                    hex: !self.hex,
+                    hex_half: None,
+                }),
+                Action::RemoveLast => {
+                    if buffer.data.is_empty() {
+                        return Some(ModeTransition::None);
+                    }
+                    let delta = ops::backspace(&buffer.data, &buffer.selection);
+                    ModeTransition::DirtyBytes(buffer.apply_delta(&delta))
+                }
+                Action::RemoveThis => {
+                    if buffer.data.is_empty() {
+                        return Some(ModeTransition::None);
+                    }
+                    let delta = ops::delete_cursor(&buffer.data, &buffer.selection);
+                    ModeTransition::DirtyBytes(buffer.apply_delta(&delta))
+                }
+            })
+        } else if let Event::Key(KeyEvent {
+            code: KeyCode::Char(key),
+            modifiers,
+        }) = evt
+        {
+            if !(*modifiers & !KeyModifiers::SHIFT).is_empty() {
+                return None;
+            }
 
-        if hex {
-            transition_hex_insertion(*key, buffer, before, hex_half)
+            if self.hex {
+                transition_hex_insertion(*key, buffer, self.before, self.hex_half)
+            } else {
+                Some(transition_ascii_insertion(*key, buffer))
+            }
         } else {
-            Some(transition_ascii_insertion(*key, buffer))
+            None
         }
-    } else {
-        None
     }
 }

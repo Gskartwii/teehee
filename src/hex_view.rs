@@ -1,4 +1,4 @@
-use super::state::State;
+use super::state::Mode;
 
 use std::cell::Cell;
 use std::cmp;
@@ -110,10 +110,9 @@ pub struct HexView {
     bytes_per_line: usize,
     start_offset: usize,
     last_visible_rows: Cell<usize>,
-    last_powerline_len: Cell<usize>,
     last_draw_time: time::Duration,
 
-    state: State,
+    state: Box<dyn Mode>,
 }
 
 impl HexView {
@@ -124,11 +123,10 @@ impl HexView {
             start_offset: 0,
             size: terminal::size().unwrap(),
             last_visible_rows: Cell::new(0),
-            last_powerline_len: Cell::new(0),
 
             last_draw_time: Default::default(),
 
-            state: State::Normal,
+            state: Box::new(modes::normal::Normal()),
         }
     }
 
@@ -432,21 +430,11 @@ impl HexView {
 
     fn draw_statusline(&self, stdout: &mut impl Write) -> Result<()> {
         let line_length = self.calculate_powerline_length();
-        let last_length = self.last_powerline_len.get();
-        if line_length < last_length {
-            let delta = last_length - line_length;
-            queue!(
-                stdout,
-                cursor::MoveTo(self.size.0 - last_length as u16, self.size.1),
-                style::Print(make_padding(delta)),
-            )?;
-        } else {
-            queue!(
-                stdout,
-                cursor::MoveTo(self.size.0 - line_length as u16, self.size.1),
-            )?;
-        }
-        self.last_powerline_len.set(line_length);
+        queue!(
+            stdout,
+            cursor::MoveTo(self.size.0 - line_length as u16, self.size.1),
+            terminal::Clear(terminal::ClearType::CurrentLine),
+        )?;
 
         self.draw_statusline_here(stdout)?;
         Ok(())
@@ -678,17 +666,17 @@ impl HexView {
         }
     }
 
-    fn transition(&mut self, stdout: &mut impl Write, transition: StateTransition) -> Result<()> {
+    fn transition(&mut self, stdout: &mut impl Write, transition: ModeTransition) -> Result<()> {
         match transition {
-            StateTransition::None => Ok(()),
-            StateTransition::DirtyBytes(dirty_bytes) => {
+            ModeTransition::None => Ok(()),
+            ModeTransition::DirtyBytes(dirty_bytes) => {
                 self.transition_dirty_bytes(stdout, dirty_bytes)
             }
-            StateTransition::NewState(state) => {
+            ModeTransition::NewMode(state) => {
                 self.state = state;
                 Ok(())
             }
-            StateTransition::StateAndDirtyBytes(state, dirty_bytes) => {
+            ModeTransition::ModeAndDirtyBytes(state, dirty_bytes) => {
                 self.state = state;
                 self.transition_dirty_bytes(stdout, dirty_bytes)
             }
@@ -707,24 +695,9 @@ impl HexView {
                 break;
             }
             let evt = event::read()?;
-            let transition = match self.state {
-                State::Quitting => break,
-                State::Normal => {
-                    modes::normal::transition(&evt, &mut self.buffer, self.bytes_per_line)
-                }
-                State::Split { count } => modes::split::transition(&evt, &mut self.buffer, count),
-                State::JumpTo { extend } => {
-                    modes::jumpto::transition(&evt, &mut self.buffer, extend, self.bytes_per_line)
-                }
-                State::Insert {
-                    hex,
-                    before,
-                    hex_half,
-                } => modes::insert::transition(&evt, &mut self.buffer, before, hex, hex_half),
-                State::Replace { hex, hex_half } => {
-                    modes::replace::transition(&evt, &mut self.buffer, hex, hex_half)
-                }
-            };
+            let transition = self
+                .state
+                .transition(&evt, &mut self.buffer, self.bytes_per_line);
             if let Some(transition) = transition {
                 self.transition(stdout, transition)?;
             } else {

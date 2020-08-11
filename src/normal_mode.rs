@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
@@ -5,9 +6,13 @@ use lazy_static::lazy_static;
 
 use super::buffer::*;
 use super::keymap::*;
+use super::modes;
 use super::operations as ops;
 use super::selection::Direction;
 use super::state::*;
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub struct Normal();
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 enum Action {
@@ -77,118 +82,130 @@ lazy_static! {
     static ref DEFAULT_MAPS: KeyMap<Action> = default_maps();
 }
 
-pub fn transition(
-    event: &Event,
-    buffer: &mut Buffer,
-    bytes_per_line: usize,
-) -> Option<StateTransition> {
-    if let Some(action) = DEFAULT_MAPS.event_to_action(event) {
-        Some(match action {
-            Action::Quit => StateTransition::NewState(State::Quitting),
-            Action::JumpToMode => StateTransition::NewState(State::JumpTo { extend: false }),
-            Action::ExtendToMode => StateTransition::NewState(State::JumpTo { extend: true }),
-            Action::SplitMode => StateTransition::NewState(State::Split { count: None }),
-            Action::Insert { hex } => StateTransition::StateAndDirtyBytes(
-                State::Insert {
-                    hex,
-                    before: true,
-                    hex_half: None,
-                },
-                buffer.map_selections(|region| vec![region.to_backward()]),
-            ),
-            Action::Append { hex } => StateTransition::StateAndDirtyBytes(
-                State::Insert {
-                    hex,
-                    before: false,
-                    hex_half: None,
-                },
-                {
-                    let max_size = buffer.data.len();
-                    buffer.map_selections(|region| {
-                        vec![region.to_forward().simple_extend(
-                            Direction::Right,
-                            bytes_per_line,
-                            max_size,
-                        )]
-                    })
-                },
-            ),
-            Action::ReplaceMode { hex } => StateTransition::NewState(State::Replace {
-                hex,
-                hex_half: None,
-            }),
-            Action::Move(direction) => {
-                let max_bytes = buffer.data.len();
-                StateTransition::DirtyBytes(buffer.map_selections(|region| {
-                    vec![region.simple_move(direction, bytes_per_line, max_bytes)]
-                }))
-            }
-            Action::Extend(direction) => {
-                let max_bytes = buffer.data.len();
-                StateTransition::DirtyBytes(buffer.map_selections(|region| {
-                    vec![region.simple_extend(direction, bytes_per_line, max_bytes)]
-                }))
-            }
-            Action::SwapCaret => StateTransition::DirtyBytes(
-                buffer.map_selections(|region| vec![region.swap_caret()]),
-            ),
-            Action::CollapseSelection => {
-                StateTransition::DirtyBytes(buffer.map_selections(|region| vec![region.collapse()]))
-            }
-            Action::Delete { register } => {
-                buffer.yank_selections(register);
-                if !buffer.data.is_empty() {
-                    let delta = ops::deletion(&buffer.data, &buffer.selection);
-                    StateTransition::DirtyBytes(buffer.apply_delta(&delta))
-                } else {
-                    StateTransition::None
+impl Mode for Normal {
+    fn name(&self) -> Cow<str> {
+        "NORMAL".into()
+    }
+
+    fn transition(
+        &self,
+        event: &Event,
+        buffer: &mut Buffer,
+        bytes_per_line: usize,
+    ) -> Option<ModeTransition> {
+        if let Some(action) = DEFAULT_MAPS.event_to_action(event) {
+            Some(match action {
+                Action::Quit => ModeTransition::new_mode(modes::quitting::Quitting()),
+                Action::JumpToMode => {
+                    ModeTransition::new_mode(modes::jumpto::JumpTo { extend: false })
                 }
-            }
-            Action::Change { hex, register } => {
-                buffer.yank_selections(register);
-                if !buffer.data.is_empty() {
-                    let delta = ops::deletion(&buffer.data, &buffer.selection);
-                    StateTransition::StateAndDirtyBytes(
-                        State::Insert {
-                            hex,
-                            before: true,
-                            hex_half: None,
-                        },
-                        buffer.apply_delta(&delta),
-                    )
-                } else {
-                    StateTransition::NewState(State::Insert {
+                Action::ExtendToMode => {
+                    ModeTransition::new_mode(modes::jumpto::JumpTo { extend: true })
+                }
+                Action::SplitMode => ModeTransition::new_mode(modes::split::Split { count: None }),
+                Action::Insert { hex } => ModeTransition::new_mode_and_dirty(
+                    modes::insert::Insert {
                         hex,
                         before: true,
                         hex_half: None,
-                    })
+                    },
+                    buffer.map_selections(|region| vec![region.to_backward()]),
+                ),
+                Action::Append { hex } => ModeTransition::new_mode_and_dirty(
+                    modes::insert::Insert {
+                        hex,
+                        before: false,
+                        hex_half: None,
+                    },
+                    {
+                        let max_size = buffer.data.len();
+                        buffer.map_selections(|region| {
+                            vec![region.to_forward().simple_extend(
+                                Direction::Right,
+                                bytes_per_line,
+                                max_size,
+                            )]
+                        })
+                    },
+                ),
+                Action::ReplaceMode { hex } => ModeTransition::new_mode(modes::replace::Replace {
+                    hex,
+                    hex_half: None,
+                }),
+                Action::Move(direction) => {
+                    let max_bytes = buffer.data.len();
+                    ModeTransition::DirtyBytes(buffer.map_selections(|region| {
+                        vec![region.simple_move(direction, bytes_per_line, max_bytes)]
+                    }))
                 }
-            }
-            Action::Yank { register } => {
-                buffer.yank_selections(register);
-                StateTransition::None
-            }
-            Action::Paste { register, after } => {
-                let delta = ops::paste(
-                    &buffer.data,
-                    &buffer.selection,
-                    &buffer.registers.get(&register).unwrap_or(&vec![vec![]]),
-                    after,
-                );
-                StateTransition::DirtyBytes(buffer.apply_delta(&delta))
-            }
-            Action::RemoveMain => StateTransition::DirtyBytes(buffer.remove_main_sel()),
-            Action::RetainMain => StateTransition::DirtyBytes(buffer.retain_main_sel()),
-            Action::SelectNext => StateTransition::DirtyBytes(buffer.select_next()),
-            Action::SelectPrev => StateTransition::DirtyBytes(buffer.select_prev()),
-            Action::SelectAll => {
-                buffer.selection.select_all(buffer.data.len());
-                StateTransition::DirtyBytes(DirtyBytes::ChangeInPlace(vec![
-                    (0..buffer.data.len()).into()
-                ]))
-            }
-        })
-    } else {
-        None
+                Action::Extend(direction) => {
+                    let max_bytes = buffer.data.len();
+                    ModeTransition::DirtyBytes(buffer.map_selections(|region| {
+                        vec![region.simple_extend(direction, bytes_per_line, max_bytes)]
+                    }))
+                }
+                Action::SwapCaret => ModeTransition::DirtyBytes(
+                    buffer.map_selections(|region| vec![region.swap_caret()]),
+                ),
+                Action::CollapseSelection => ModeTransition::DirtyBytes(
+                    buffer.map_selections(|region| vec![region.collapse()]),
+                ),
+                Action::Delete { register } => {
+                    buffer.yank_selections(register);
+                    if !buffer.data.is_empty() {
+                        let delta = ops::deletion(&buffer.data, &buffer.selection);
+                        ModeTransition::DirtyBytes(buffer.apply_delta(&delta))
+                    } else {
+                        ModeTransition::None
+                    }
+                }
+                Action::Change { hex, register } => {
+                    buffer.yank_selections(register);
+                    if !buffer.data.is_empty() {
+                        let delta = ops::deletion(&buffer.data, &buffer.selection);
+                        ModeTransition::new_mode_and_dirty(
+                            modes::insert::Insert {
+                                hex,
+                                before: true,
+                                hex_half: None,
+                            },
+                            buffer.apply_delta(&delta),
+                        )
+                    } else {
+                        ModeTransition::new_mode(modes::insert::Insert {
+                            hex,
+                            before: true,
+                            hex_half: None,
+                        })
+                    }
+                }
+                Action::Yank { register } => {
+                    buffer.yank_selections(register);
+                    ModeTransition::None
+                }
+                Action::Paste { register, after } => {
+                    let delta = ops::paste(
+                        &buffer.data,
+                        &buffer.selection,
+                        &buffer.registers.get(&register).unwrap_or(&vec![vec![]]),
+                        after,
+                    );
+                    ModeTransition::DirtyBytes(buffer.apply_delta(&delta))
+                }
+                Action::RemoveMain => ModeTransition::DirtyBytes(buffer.remove_main_sel()),
+                Action::RetainMain => ModeTransition::DirtyBytes(buffer.retain_main_sel()),
+                Action::SelectNext => ModeTransition::DirtyBytes(buffer.select_next()),
+                Action::SelectPrev => ModeTransition::DirtyBytes(buffer.select_prev()),
+                Action::SelectAll => {
+                    buffer.selection.select_all(buffer.data.len());
+                    ModeTransition::DirtyBytes(DirtyBytes::ChangeInPlace(vec![(0..buffer
+                        .data
+                        .len())
+                        .into()]))
+                }
+            })
+        } else {
+            None
+        }
     }
 }
