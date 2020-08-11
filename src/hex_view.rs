@@ -1,5 +1,3 @@
-use super::state::Mode;
-
 use std::cell::Cell;
 use std::cmp;
 use std::collections::HashSet;
@@ -17,8 +15,8 @@ use crossterm::{
 use xi_rope::Interval;
 
 use super::buffer::*;
+use super::mode::*;
 use super::modes;
-use super::state::*;
 use std::io::Write;
 
 const VERTICAL: &str = "│";
@@ -112,7 +110,7 @@ pub struct HexView {
     last_visible_rows: Cell<usize>,
     last_draw_time: time::Duration,
 
-    state: Box<dyn Mode>,
+    mode: Box<dyn Mode>,
 }
 
 impl HexView {
@@ -126,7 +124,7 @@ impl HexView {
 
             last_draw_time: Default::default(),
 
-            state: Box::new(modes::normal::Normal()),
+            mode: Box::new(modes::normal::Normal()),
         }
     }
 
@@ -303,7 +301,7 @@ impl HexView {
                 if selected_regions[0].caret == i {
                     let base_style = command_stack.last().unwrap().clone();
                     let mut caret_cmd = mark_commands[normalized].clone();
-                    if self.state.has_half_cursor() {
+                    if self.mode.has_half_cursor() {
                         if i == selected_regions[0].min() {
                             caret_cmd = caret_cmd
                                 .with_mid_style(self.caret_style())
@@ -352,7 +350,7 @@ impl HexView {
     fn calculate_powerline_length(&self) -> usize {
         let mut length = 0;
         length += 1; // leftarrow
-        length += 2 + self.state.name().len();
+        length += 2 + self.mode.name().len();
         length += 1; // leftarrow
         length += format!(
             " {} sels ({}) ",
@@ -379,7 +377,7 @@ impl HexView {
             stdout,
             style::PrintStyledContent(style::style(LEFTARROW).with(Color::DarkYellow)),
             style::PrintStyledContent(
-                style::style(format!(" {} ", self.state.name()))
+                style::style(format!(" {} ", self.mode.name()))
                     .with(Color::AnsiValue(16))
                     .on(Color::DarkYellow)
             ),
@@ -672,12 +670,12 @@ impl HexView {
             ModeTransition::DirtyBytes(dirty_bytes) => {
                 self.transition_dirty_bytes(stdout, dirty_bytes)
             }
-            ModeTransition::NewMode(state) => {
-                self.state = state;
+            ModeTransition::NewMode(mode) => {
+                self.mode = mode;
                 Ok(())
             }
-            ModeTransition::ModeAndDirtyBytes(state, dirty_bytes) => {
-                self.state = state;
+            ModeTransition::ModeAndDirtyBytes(mode, dirty_bytes) => {
+                self.mode = mode;
                 self.transition_dirty_bytes(stdout, dirty_bytes)
             }
         }
@@ -691,12 +689,12 @@ impl HexView {
         stdout.flush()?;
 
         loop {
-            if !self.state.takes_input() {
+            if !self.mode.takes_input() {
                 break;
             }
             let evt = event::read()?;
             let transition = self
-                .state
+                .mode
                 .transition(&evt, &mut self.buffer, self.bytes_per_line);
             if let Some(transition) = transition {
                 self.transition(stdout, transition)?;

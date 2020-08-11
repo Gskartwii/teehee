@@ -6,10 +6,10 @@ use lazy_static::lazy_static;
 
 use super::buffer::*;
 use super::keymap::*;
+use super::mode::*;
 use super::modes;
 use super::operations as ops;
 use super::selection::Direction;
-use super::state::*;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct Normal();

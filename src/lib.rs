@@ -3,9 +3,9 @@ mod byte_rope;
 pub mod hex_view;
 #[macro_use]
 mod keymap;
+mod mode;
 mod operations;
 mod selection;
-mod state;
 
 mod insert_mode;
 mod jumpto_mode;
@@ -19,7 +19,7 @@ mod modes {
 
         #[derive(Debug, PartialEq, Eq, Clone, Copy)]
         pub struct Quitting();
-        impl crate::state::Mode for Quitting {
+        impl crate::mode::Mode for Quitting {
             fn name(&self) -> Cow<str> {
                 "QUITTING".into()
             }
@@ -31,7 +31,7 @@ mod modes {
                 _: &crossterm::event::Event,
                 _: &mut crate::buffer::Buffer,
                 _: usize,
-            ) -> Option<crate::state::ModeTransition> {
+            ) -> Option<crate::mode::ModeTransition> {
                 unreachable!();
             }
         }

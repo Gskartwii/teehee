@@ -3,8 +3,8 @@ use xi_rope::Interval;
 use std::collections::HashMap;
 
 use super::byte_rope::*;
+use super::mode::*;
 use super::selection::*;
-use super::state::*;
 
 pub struct Buffer {
     pub data: Rope,

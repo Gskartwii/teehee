@@ -3,9 +3,9 @@ use std::collections::HashMap;
 
 use super::buffer::*;
 use super::keymap::*;
+use super::mode::*;
 use super::modes::normal::Normal;
 use super::operations as ops;
-use super::state::*;
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use lazy_static::lazy_static;

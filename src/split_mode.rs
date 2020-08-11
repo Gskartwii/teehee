@@ -5,9 +5,9 @@ use std::ops::RangeInclusive;
 
 use super::buffer::*;
 use super::keymap::*;
+use super::mode::*;
 use super::modes::normal::Normal;
 use super::selection::*;
-use super::state::*;
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 
