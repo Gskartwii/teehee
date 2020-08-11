@@ -6,7 +6,8 @@ use super::buffer::Buffer;
 
 // A mode should OWN all data related to it. Hence we bound it by 'static.
 pub trait Mode: 'static {
-    fn name(&self) -> Cow<str>;
+    // TODO: Maybe this should be just String instead.
+    fn name(&self) -> Cow<'static, str>;
     fn transition(
         &self,
         event: &Event,

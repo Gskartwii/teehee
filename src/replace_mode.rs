@@ -34,7 +34,7 @@ lazy_static! {
 }
 
 impl Mode for Replace {
-    fn name(&self) -> Cow<str> {
+    fn name(&self) -> Cow<'static, str> {
         match (self.hex, self.hex_half) {
             (true, None) => "REPLACE (hex)".into(),
             (false, _) => "REPLACE (ascii)".into(),

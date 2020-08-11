@@ -92,7 +92,7 @@ fn transition_hex_insertion(
 }
 
 impl Mode for Insert {
-    fn name(&self) -> Cow<str> {
+    fn name(&self) -> Cow<'static, str> {
         match (self.before, self.hex) {
             (true, true) => "INSERT (hex)".into(),
             (true, false) => "INSERT (ascii)".into(),

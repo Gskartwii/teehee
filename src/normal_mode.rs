@@ -83,7 +83,7 @@ lazy_static! {
 }
 
 impl Mode for Normal {
-    fn name(&self) -> Cow<str> {
+    fn name(&self) -> Cow<'static, str> {
         "NORMAL".into()
     }
 

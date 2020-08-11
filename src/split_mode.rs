@@ -42,7 +42,7 @@ lazy_static! {
 }
 
 impl Mode for Split {
-    fn name(&self) -> Cow<str> {
+    fn name(&self) -> Cow<'static, str> {
         match self.count {
             None => "SPLIT".into(),
             Some(cnt) => format!("SPLIT ({})", cnt).into(),

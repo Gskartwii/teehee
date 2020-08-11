@@ -11,7 +11,7 @@ mod insert_mode;
 mod jumpto_mode;
 mod normal_mode;
 mod replace_mode;
-//mod search_mode;
+mod search_mode;
 mod split_mode;
 mod modes {
     pub mod quitting {
@@ -20,7 +20,7 @@ mod modes {
         #[derive(Debug, PartialEq, Eq, Clone, Copy)]
         pub struct Quitting();
         impl crate::mode::Mode for Quitting {
-            fn name(&self) -> Cow<str> {
+            fn name(&self) -> Cow<'static, str> {
                 "QUITTING".into()
             }
             fn takes_input(&self) -> bool {
@@ -41,6 +41,6 @@ mod modes {
     pub(crate) use super::jumpto_mode as jumpto;
     pub(crate) use super::normal_mode as normal;
     pub(crate) use super::replace_mode as replace;
-    //pub(crate) use super::search_mode as search;
+    pub(crate) use super::search_mode as search;
     pub(crate) use super::split_mode as split;
 }
