@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::cmp;
 use std::collections::HashMap;
 use std::ops::RangeInclusive;
@@ -7,6 +8,7 @@ use super::buffer::*;
 use super::keymap::*;
 use super::mode::*;
 use super::modes::normal::Normal;
+use super::modes::search::{Pattern, Search, SearchAcceptor};
 use super::selection::*;
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
@@ -22,6 +24,7 @@ pub struct Split {
 enum Action {
     Width(usize),
     Null,
+    Search,
 }
 
 fn default_maps() -> KeyMap<Action> {
@@ -32,13 +35,25 @@ fn default_maps() -> KeyMap<Action> {
             ('d' => Action::Width(4)),
             ('q' => Action::Width(8)),
             ('o' => Action::Width(16)),
-            ('n' => Action::Null)
+            ('n' => Action::Null),
+            ('/' => Action::Search)
         ),
     }
 }
 
 lazy_static! {
     static ref DEFAULT_MAPS: KeyMap<Action> = default_maps();
+}
+
+impl SearchAcceptor for Split {
+    fn apply_search(
+        &self,
+        pattern: Pattern,
+        buffer: &mut Buffer,
+        bytes_per_line: usize,
+    ) -> ModeTransition {
+        todo!()
+    }
 }
 
 impl Mode for Split {
@@ -144,6 +159,13 @@ impl Mode for Split {
                         }),
                     )
                 }
+                Action::Search => ModeTransition::new_mode(Search {
+                    hex: true,
+                    hex_half: None,
+                    cursor: 0,
+                    pattern: Pattern::default(),
+                    next: RefCell::new(Some(Box::new(*self))),
+                }),
             })
         } else if let Event::Key(KeyEvent {
             code: KeyCode::Char(ch),
@@ -169,5 +191,8 @@ impl Mode for Split {
         } else {
             None
         }
+    }
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }

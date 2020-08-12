@@ -102,12 +102,141 @@ impl fmt::Display for ByteAsciiRepr {
     }
 }
 
+struct MixedRepr(u8);
+impl fmt::Display for MixedRepr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.0.is_ascii_graphic() || self.0 == 0x20 {
+            write!(f, "{}", char::from(self.0))
+        } else {
+            write!(f, "<{:2x}>", self.0)
+        }
+    }
+}
+
+trait StatusLinePrompter: Mode {
+    fn render_with_size(
+        &self,
+        stdout: &mut dyn Write,
+        max_width: usize,
+        last_start_col: usize,
+    ) -> Result<usize>;
+}
+
+impl StatusLinePrompter for modes::search::Search {
+    fn render_with_size(
+        &self,
+        stdout: &mut dyn Write,
+        mut max_width: usize,
+        last_start_col: usize,
+    ) -> Result<usize> {
+        let mut start_column = last_start_col;
+        queue!(
+            stdout,
+            style::PrintStyledContent(
+                style::style("search:")
+                    .with(style::Color::White)
+                    .on(style::Color::Blue),
+            )
+        )?;
+        max_width -= "search:".len();
+
+        if self.hex {
+            let full_bytes = std::cmp::min(self.pattern.pieces.len(), max_width / 3);
+
+            if self.pattern.pieces.len() <= full_bytes {
+                start_column = 0;
+            } else if self.cursor >= start_column + full_bytes {
+                start_column = self.cursor - full_bytes;
+            } else if self.cursor < start_column {
+                start_column = self.cursor;
+            }
+
+            let normalized_cursor = self.cursor - start_column;
+            for (i, piece) in self.pattern.pieces[start_column..full_bytes]
+                .iter()
+                .enumerate()
+            {
+                use modes::search::PatternPiece;
+                match piece {
+                    PatternPiece::Literal(byte) if normalized_cursor != i => {
+                        queue!(stdout, style::Print(format!("{:2x} ", byte)))?
+                    }
+                    PatternPiece::Literal(byte)
+                        if normalized_cursor == i && self.hex_half.is_some() =>
+                    {
+                        queue!(
+                            stdout,
+                            style::Print(format!("{:x}", byte >> 4)),
+                            style::PrintStyledContent(
+                                style::style(format!("{:x}", byte & 0xf))
+                                    .with(style::Color::Black)
+                                    .on(style::Color::White)
+                            ),
+                            style::Print(" "),
+                        )?
+                    }
+                    PatternPiece::Literal(byte) => queue!(
+                        stdout,
+                        style::PrintStyledContent(
+                            style::style(format!("{:2x}", byte))
+                                .with(style::Color::Black)
+                                .on(style::Color::White)
+                        ),
+                        style::Print(" "),
+                    )?,
+                    PatternPiece::Wildcard if normalized_cursor != i => queue!(
+                        stdout,
+                        style::PrintStyledContent(style::style("** ").with(style::Color::DarkRed))
+                    )?,
+                    PatternPiece::Wildcard => queue!(
+                        stdout,
+                        style::PrintStyledContent(
+                            style::style("**")
+                                .with(style::Color::DarkRed)
+                                .on(style::Color::White)
+                        ),
+                        style::Print(" "),
+                    )?,
+                }
+            }
+            if self.cursor == self.pattern.pieces.len() {
+                queue!(
+                    stdout,
+                    style::PrintStyledContent(
+                        style::style("  ")
+                            .with(style::Color::Black)
+                            .on(style::Color::White)
+                    ),
+                    style::Print(" "),
+                )?
+            }
+
+            return Ok(start_column);
+        }
+        queue!(
+            stdout,
+            style::PrintStyledContent(
+                style::style("todo")
+                    .with(style::Color::White)
+                    .on(style::Color::Blue),
+            )
+        )?;
+        return Ok(start_column);
+
+        /*let mut remaining_width = max_width;
+        let mut styled_bytes = vec![];
+
+        Ok(start_column)*/
+    }
+}
+
 pub struct HexView {
     buffer: Buffer,
     size: (u16, u16),
     bytes_per_line: usize,
     start_offset: usize,
     last_visible_rows: Cell<usize>,
+    last_visible_prompt_col: Cell<usize>,
     last_draw_time: time::Duration,
 
     mode: Box<dyn Mode>,
@@ -121,6 +250,7 @@ impl HexView {
             start_offset: 0,
             size: terminal::size().unwrap(),
             last_visible_rows: Cell::new(0),
+            last_visible_prompt_col: Cell::new(0),
 
             last_draw_time: Default::default(),
 
@@ -435,6 +565,13 @@ impl HexView {
         )?;
 
         self.draw_statusline_here(stdout)?;
+        if let Some(statusliner) = self.mode.as_any().downcast_ref::<modes::search::Search>() {
+            queue!(stdout, cursor::MoveTo(0, self.size.1),)?;
+            let prev_col = self.last_visible_prompt_col.get();
+            let new_col = statusliner.render_with_size(stdout, self.size.0 as usize, prev_col)?;
+            self.last_visible_prompt_col.set(new_col);
+        }
+
         Ok(())
     }
 

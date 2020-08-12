@@ -21,6 +21,7 @@ pub trait Mode: 'static {
     fn has_half_cursor(&self) -> bool {
         false
     }
+    fn as_any(&self) -> &dyn std::any::Any;
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]

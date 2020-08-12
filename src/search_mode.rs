@@ -1,6 +1,7 @@
 use super::buffer::*;
 use super::keymap::*;
 use super::mode::*;
+use super::modes::normal::Normal;
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use lazy_static::lazy_static;
 use std::borrow::Cow;
@@ -13,9 +14,9 @@ pub enum PatternPiece {
     Wildcard,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub struct Pattern {
-    pieces: Vec<PatternPiece>,
+    pub pieces: Vec<PatternPiece>,
 }
 
 impl Pattern {
@@ -47,9 +48,11 @@ pub trait SearchAcceptor: Mode {
 }
 
 pub struct Search {
-    pattern: Pattern,
-    cursor: usize,
-    next: RefCell<Option<Box<dyn SearchAcceptor>>>,
+    pub pattern: Pattern,
+    pub cursor: usize,
+    pub hex: bool,
+    pub hex_half: Option<u8>,
+    pub next: RefCell<Option<Box<dyn SearchAcceptor>>>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -58,7 +61,11 @@ enum Action {
     InsertWilcard,
     RemoveLast,
     RemoveThis,
+    CursorLeft,
+    CursorRight,
+    SwitchInputMode,
     Finish,
+    Cancel,
 }
 
 fn default_maps() -> KeyMap<Action> {
@@ -67,6 +74,10 @@ fn default_maps() -> KeyMap<Action> {
             (key KeyCode::Backspace => Action::RemoveLast),
             (key KeyCode::Delete => Action::RemoveThis),
             (key KeyCode::Enter => Action::Finish),
+            (key KeyCode::Esc => Action::Cancel),
+            (key KeyCode::Left => Action::CursorLeft),
+            (key KeyCode::Right => Action::CursorRight),
+            (ctrl 'o' => Action::SwitchInputMode ),
             (ctrl 'n' => Action::InsertNull),
             (ctrl 'w' => Action::InsertWilcard)
         ),
@@ -97,6 +108,8 @@ impl Mode for Search {
         if let Some(action) = DEFAULT_MAPS.event_to_action(evt) {
             let mut cursor = self.cursor;
             let mut pattern = self.pattern.to_owned();
+            let mut hex = self.hex;
+            let mut hex_half = self.hex_half;
             match action {
                 Action::InsertNull => cursor = pattern.insert_literal(cursor, 0),
                 Action::InsertWilcard => cursor = pattern.insert_wildcard(cursor),
@@ -106,6 +119,19 @@ impl Mode for Search {
                 }
                 Action::RemoveLast => return Some(ModeTransition::None),
                 Action::RemoveThis => cursor = pattern.remove(cursor),
+                Action::CursorLeft if cursor != 0 => {
+                    cursor -= 1;
+                }
+                Action::CursorLeft => {}
+                Action::CursorRight if cursor < pattern.pieces.len() => {
+                    cursor += 1;
+                }
+                Action::CursorRight => {}
+                Action::SwitchInputMode => {
+                    hex = !hex;
+                    hex_half = None;
+                }
+                Action::Cancel => return Some(ModeTransition::new_mode(Normal())),
                 Action::Finish => {
                     return Some(self.next.borrow().as_ref().unwrap().apply_search(
                         pattern,
@@ -117,6 +143,8 @@ impl Mode for Search {
             Some(ModeTransition::new_mode(Search {
                 pattern,
                 cursor,
+                hex,
+                hex_half,
                 next: RefCell::new(self.next.replace(None)),
             })) // The old state won't be valid after this
         } else if let Event::Key(KeyEvent {
@@ -127,9 +155,21 @@ impl Mode for Search {
             if !modifiers.is_empty() {
                 return None;
             }
-            None
+            let mut pattern = self.pattern.to_owned();
+            let mut cursor = self.cursor;
+            cursor = pattern.insert_literal(cursor, *ch as u8);
+            Some(ModeTransition::new_mode(Search {
+                pattern,
+                cursor,
+                hex: self.hex,
+                hex_half: self.hex_half,
+                next: RefCell::new(self.next.replace(None)),
+            })) // The old state won't be valid after this
         } else {
             None
         }
+    }
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }

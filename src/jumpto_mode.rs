@@ -66,4 +66,7 @@ impl Mode for JumpTo {
             None
         }
     }
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }

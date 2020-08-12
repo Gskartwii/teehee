@@ -34,6 +34,9 @@ mod modes {
             ) -> Option<crate::mode::ModeTransition> {
                 unreachable!();
             }
+            fn as_any(&self) -> &dyn std::any::Any {
+                self
+            }
         }
     }
 
