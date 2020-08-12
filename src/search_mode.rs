@@ -24,6 +24,10 @@ impl Pattern {
         self.pieces.insert(position, PatternPiece::Literal(literal));
         position + 1
     }
+    fn insert_half_literal(&mut self, position: usize, literal: u8) -> usize {
+        self.pieces[position] = PatternPiece::Literal(literal);
+        position + 1
+    }
     fn insert_wildcard(&mut self, position: usize) -> usize {
         self.pieces.insert(position, PatternPiece::Wildcard);
         position + 1
@@ -109,7 +113,12 @@ impl Mode for Search {
             let mut cursor = self.cursor;
             let mut pattern = self.pattern.to_owned();
             let mut hex = self.hex;
-            let mut hex_half = self.hex_half;
+
+            if self.hex_half.is_some() {
+                // hex insertion in progress: leave it as-is and skip to the next char
+                cursor += 1;
+            }
+
             match action {
                 Action::InsertNull => cursor = pattern.insert_literal(cursor, 0),
                 Action::InsertWilcard => cursor = pattern.insert_wildcard(cursor),
@@ -131,7 +140,6 @@ impl Mode for Search {
                 Action::CursorRight => {}
                 Action::SwitchInputMode => {
                     hex = !hex;
-                    hex_half = None;
                 }
                 Action::Cancel => return Some(ModeTransition::new_mode(Normal())),
                 Action::Finish => {
@@ -146,7 +154,7 @@ impl Mode for Search {
                 pattern,
                 cursor,
                 hex,
-                hex_half,
+                hex_half: None, // after any action that doesn't insert a hex half, the hex half should be reset
                 next: RefCell::new(self.next.replace(None)),
             })) // The old state won't be valid after this
         } else if let Event::Key(KeyEvent {
@@ -159,12 +167,27 @@ impl Mode for Search {
             }
             let mut pattern = self.pattern.to_owned();
             let mut cursor = self.cursor;
-            cursor = pattern.insert_literal(cursor, *ch as u8);
+            let mut hex_half = self.hex_half;
+            if !self.hex {
+                cursor = pattern.insert_literal(cursor, *ch as u8);
+            } else {
+                if !ch.is_ascii_hexdigit() {
+                    return None;
+                }
+                let hex_digit = ch.to_digit(16).unwrap() as u8;
+                if let Some(half) = hex_half {
+                    cursor = pattern.insert_half_literal(cursor, half | hex_digit);
+                    hex_half = None;
+                } else {
+                    pattern.insert_literal(cursor, hex_digit << 4); // Ignore cursor update
+                    hex_half = Some(hex_digit << 4);
+                }
+            }
             Some(ModeTransition::new_mode(Search {
                 pattern,
                 cursor,
+                hex_half,
                 hex: self.hex,
-                hex_half: self.hex_half,
                 next: RefCell::new(self.next.replace(None)),
             })) // The old state won't be valid after this
         } else {
