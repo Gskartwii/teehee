@@ -28,12 +28,12 @@ impl Pattern {
         self.pieces.insert(position, PatternPiece::Wildcard);
         position + 1
     }
-    fn remove(&mut self, position: usize) -> usize {
+    fn remove(&mut self, position: usize) -> bool {
         if position < self.pieces.len() {
             self.pieces.remove(position);
-            position - 1
+            true
         } else {
-            position
+            false
         }
     }
 }
@@ -118,7 +118,9 @@ impl Mode for Search {
                     cursor -= 1;
                 }
                 Action::RemoveLast => return Some(ModeTransition::None),
-                Action::RemoveThis => cursor = pattern.remove(cursor),
+                Action::RemoveThis => {
+                    pattern.remove(cursor);
+                } // Don't move the cursor
                 Action::CursorLeft if cursor != 0 => {
                     cursor -= 1;
                 }
