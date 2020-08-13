@@ -46,12 +46,7 @@ lazy_static! {
 }
 
 impl SearchAcceptor for Split {
-    fn apply_search(
-        &self,
-        pattern: Pattern,
-        buffer: &mut Buffer,
-        bytes_per_line: usize,
-    ) -> ModeTransition {
+    fn apply_search(&self, _: Pattern, _: &mut Buffer, _: usize) -> ModeTransition {
         todo!()
     }
 }

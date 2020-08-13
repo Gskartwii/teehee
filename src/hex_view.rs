@@ -149,18 +149,11 @@ impl StatusLinePrompter for modes::search::Search {
 
         if self.hex {
             if self.cursor >= start_column + max_width / 3 {
-                start_column = self.cursor - max_width / 3;
+                start_column = self.cursor - max_width / 3 + 1;
             }
-
-            let mut last_byte =
-                std::cmp::min(self.pattern.pieces.len(), start_column + max_width / 3);
+            let last_byte = std::cmp::min(self.pattern.pieces.len(), start_column + max_width / 3);
 
             let normalized_cursor = self.cursor - start_column;
-            if self.cursor == self.pattern.pieces.len()
-                && self.pattern.pieces.len() >= max_width / 3
-            {
-                last_byte -= 1; // Reserve space for this at the end of the line.
-            }
             for (i, piece) in self.pattern.pieces[start_column..last_byte]
                 .iter()
                 .enumerate()
