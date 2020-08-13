@@ -108,7 +108,7 @@ impl fmt::Display for MixedRepr {
         if self.0.is_ascii_graphic() || self.0 == 0x20 {
             write!(f, "{}", char::from(self.0))
         } else {
-            write!(f, "<{:2x}>", self.0)
+            write!(f, "<{:02x}>", self.0)
         }
     }
 }
@@ -165,10 +165,9 @@ impl StatusLinePrompter for modes::search::Search {
                 .iter()
                 .enumerate()
             {
-                use modes::search::PatternPiece;
                 match piece {
                     PatternPiece::Literal(byte) if normalized_cursor != i => {
-                        queue!(stdout, style::Print(format!("{:2x} ", byte)))?
+                        queue!(stdout, style::Print(format!("{:02x} ", byte)))?
                     }
                     PatternPiece::Literal(byte)
                         if normalized_cursor == i && self.hex_half.is_some() =>
@@ -187,7 +186,7 @@ impl StatusLinePrompter for modes::search::Search {
                     PatternPiece::Literal(byte) => queue!(
                         stdout,
                         style::PrintStyledContent(
-                            style::style(format!("{:2x}", byte))
+                            style::style(format!("{:02x}", byte))
                                 .with(style::Color::Black)
                                 .on(style::Color::White)
                         ),
@@ -269,7 +268,7 @@ impl StatusLinePrompter for modes::search::Search {
                 PatternPiece::Literal(byte) if normalized_cursor != i => queue!(
                     stdout,
                     style::PrintStyledContent(
-                        style::style(format!("<{:2x}>", byte))
+                        style::style(format!("<{:02x}>", byte))
                             .with(style::Color::Black)
                             .on(style::Color::DarkGrey)
                     ),
@@ -289,7 +288,7 @@ impl StatusLinePrompter for modes::search::Search {
                 PatternPiece::Literal(byte) => queue!(
                     stdout,
                     style::PrintStyledContent(
-                        style::style(format!("<{:2x}>", byte))
+                        style::style(format!("<{:02x}>", byte))
                             .with(style::Color::Black)
                             .on(style::Color::White)
                     ),
