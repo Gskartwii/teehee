@@ -140,13 +140,16 @@ impl StatusLinePrompter for modes::search::Search {
         )?;
         max_width -= "search:".len();
 
+        // Make sure start_column is between self.cursor and the length of the pattern
+        if self.pattern.pieces.len() <= start_column {
+            start_column = std::cmp::max(1, self.pattern.pieces.len()) - 1;
+        } else if self.cursor < start_column {
+            start_column = self.cursor;
+        }
+
         if self.hex {
             if self.cursor >= start_column + max_width / 3 {
                 start_column = self.cursor - max_width / 3;
-            } else if self.pattern.pieces.len() <= start_column {
-                start_column = std::cmp::max(1, self.pattern.pieces.len()) - 1;
-            } else if self.cursor < start_column {
-                start_column = self.cursor;
             }
 
             let mut last_byte =
@@ -219,20 +222,105 @@ impl StatusLinePrompter for modes::search::Search {
 
             return Ok(start_column);
         }
-        queue!(
-            stdout,
-            style::PrintStyledContent(
-                style::style("todo")
-                    .with(style::Color::White)
-                    .on(style::Color::Blue),
-            )
-        )?;
-        return Ok(start_column);
 
-        /*let mut remaining_width = max_width;
-        let mut styled_bytes = vec![];
+        max_width -= (self.cursor == self.pattern.pieces.len()) as usize;
 
-        Ok(start_column)*/
+        use modes::search::PatternPiece;
+        let mut lengths = self.pattern.pieces[start_column..]
+            .iter()
+            .map(|x| match x {
+                PatternPiece::Wildcard => 1,
+                PatternPiece::Literal(0x20) => 1,
+                PatternPiece::Literal(byte) if byte.is_ascii_graphic() => 1,
+                PatternPiece::Literal(_) => 4,
+            })
+            .collect::<Vec<_>>();
+        let required_length: usize = lengths[..self.cursor - start_column].iter().sum();
+        if required_length > max_width {
+            let mut remaining_delta = (required_length - max_width) as isize;
+            let num_dropped_pieces = lengths
+                .iter()
+                .position(|&x| {
+                    let is_done = remaining_delta <= 0;
+                    remaining_delta -= x as isize;
+                    is_done
+                })
+                .unwrap();
+            start_column += num_dropped_pieces;
+            lengths.drain(..num_dropped_pieces);
+        }
+
+        let normalized_cursor = self.cursor - start_column;
+        for ((i, piece), length) in self.pattern.pieces[start_column..]
+            .iter()
+            .enumerate()
+            .zip(lengths)
+        {
+            if max_width < length {
+                break;
+            }
+            max_width -= length;
+            match piece {
+                PatternPiece::Literal(byte)
+                    if normalized_cursor != i && (byte.is_ascii_graphic() || *byte == 0x20) =>
+                {
+                    queue!(stdout, style::Print(format!("{}", *byte as char)))?
+                }
+                PatternPiece::Literal(byte) if normalized_cursor != i => queue!(
+                    stdout,
+                    style::PrintStyledContent(
+                        style::style(format!("<{:2x}>", byte))
+                            .with(style::Color::Black)
+                            .on(style::Color::DarkGrey)
+                    ),
+                )?,
+                PatternPiece::Literal(byte)
+                    if normalized_cursor == i && (byte.is_ascii_graphic() || *byte == 0x20) =>
+                {
+                    queue!(
+                        stdout,
+                        style::PrintStyledContent(
+                            style::style(format!("{}", *byte as char))
+                                .with(style::Color::Black)
+                                .on(style::Color::White)
+                        ),
+                    )?
+                }
+                PatternPiece::Literal(byte) => queue!(
+                    stdout,
+                    style::PrintStyledContent(
+                        style::style(format!("<{:2x}>", byte))
+                            .with(style::Color::Black)
+                            .on(style::Color::White)
+                    ),
+                )?,
+                PatternPiece::Wildcard if normalized_cursor != i => queue!(
+                    stdout,
+                    style::PrintStyledContent(style::style("*").with(style::Color::DarkRed))
+                )?,
+                PatternPiece::Wildcard => queue!(
+                    stdout,
+                    style::PrintStyledContent(
+                        style::style("*")
+                            .with(style::Color::DarkRed)
+                            .on(style::Color::White)
+                    ),
+                )?,
+            }
+        }
+
+        if self.cursor == self.pattern.pieces.len() {
+            queue!(
+                stdout,
+                style::PrintStyledContent(
+                    style::style(" ")
+                        .with(style::Color::Black)
+                        .on(style::Color::White)
+                ),
+            )?;
+        }
+
+        Ok(start_column)
     }
 }
 
