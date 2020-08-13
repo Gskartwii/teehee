@@ -68,6 +68,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "jetscii"
+version = "0.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5f25cca2463cb19dbb1061eb3bd38a8b5e4ce1cc5a5a9fc0e02de486d92b9b05"
+
+[[package]]
 name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -234,7 +240,9 @@ name = "teehee"
 version = "0.1.0"
 dependencies = [
  "crossterm",
+ "jetscii",
  "lazy_static",
+ "regex",
  "xi-rope",
 ]
 

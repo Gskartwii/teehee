@@ -8,7 +8,7 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum PatternPiece {
     Literal(u8),
     Wildcard,
@@ -39,6 +39,20 @@ impl Pattern {
         } else {
             false
         }
+    }
+
+    pub fn as_basic_slice(&self) -> Option<Vec<u8>> {
+        self.pieces
+            .iter()
+            .copied()
+            .map(|x| {
+                if let PatternPiece::Literal(c) = x {
+                    Some(c)
+                } else {
+                    None
+                }
+            })
+            .collect::<Option<Vec<_>>>()
     }
 }
 

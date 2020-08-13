@@ -16,3 +16,5 @@ categories = ["command-line-utilities"]
 crossterm = "0.17.5"
 xi-rope = "0.3.0"
 lazy_static = "1.4.0"
+jetscii = "0.4.4"
+regex = "1"

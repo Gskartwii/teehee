@@ -12,7 +12,7 @@ use super::modes::search::{Pattern, Search, SearchAcceptor};
 use super::selection::*;
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
-
+use jetscii::ByteSubstring;
 use lazy_static::lazy_static;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -46,8 +46,71 @@ lazy_static! {
 }
 
 impl SearchAcceptor for Split {
-    fn apply_search(&self, _: Pattern, _: &mut Buffer, _: usize) -> ModeTransition {
-        todo!()
+    fn apply_search(&self, pattern: Pattern, buffer: &mut Buffer, _: usize) -> ModeTransition {
+        if let Some(basic_subslice) = pattern.as_basic_slice() {
+            let matched_ranges = buffer
+                .selection
+                .iter()
+                .map(|x| {
+                    let mut base = x.min();
+                    let mut matched_ranges = vec![];
+                    let byte_substring = ByteSubstring::new(&basic_subslice);
+
+                    while let Some(start) =
+                        byte_substring.find(&buffer.data.slice_to_cow(base..=x.max()))
+                    {
+                        let match_abs_start = base + start;
+                        matched_ranges
+                            .push(match_abs_start..match_abs_start + basic_subslice.len());
+                        base = match_abs_start + basic_subslice.len();
+                    }
+                    matched_ranges
+                })
+                .collect::<Vec<_>>();
+
+            let matched_len: usize = matched_ranges
+                .iter()
+                .flatten()
+                .map(|r| r.end - r.start)
+                .sum();
+            if matched_len == buffer.selection.len_bytes() {
+                // Everything selected was matched: refuse to split because it would yield
+                // an empty selection (invalid)
+                return ModeTransition::new_mode(Normal());
+            }
+
+            let mut remaining_matched_ranges = &matched_ranges[..];
+
+            return ModeTransition::new_mode_and_dirty(
+                Normal(),
+                buffer.map_selections(|mut base_region| {
+                    let mut out = vec![];
+                    let mut remaining = true;
+
+                    for range in &remaining_matched_ranges[0] {
+                        let (left_region, right_region) =
+                            base_region.split_at_region(range.start, range.end - 1);
+                        if let Some(left) = left_region {
+                            out.push(left);
+                        }
+                        base_region = if let Some(right) = right_region {
+                            right
+                        } else {
+                            remaining = false;
+                            break;
+                        }
+                    }
+                    remaining_matched_ranges = &remaining_matched_ranges[1..];
+
+                    if remaining {
+                        out.push(base_region);
+                    }
+
+                    out
+                }),
+            );
+        }
+        todo!();
     }
 }
 
