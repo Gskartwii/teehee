@@ -33,8 +33,8 @@ fn default_maps() -> KeyMap<Action> {
             ('q' => Action::Width(8)),
             ('o' => Action::Width(16)),
             ('n' => Action::Null),
-            ('/' => Action::Search{hex: true}),
-            ('?' => Action::Search{hex: false})
+            ('/' => Action::Search{hex: false}),
+            ('?' => Action::Search{hex: true})
         ),
     }
 }

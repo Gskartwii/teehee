@@ -43,21 +43,21 @@ Teehee supports multiple selections, efficient selection modifying commands and 
     * `o`: 16 bytes (Oword)
     * `n`: delimited by null bytes
     * `<count>`: any number of the above
-    * `/`: matching a hex pattern (`?` for text pattern)
+    * `/`: matching a text pattern (`?` for hex pattern)
 * `d` to delete selected data from buffer
-* `i` to enter insert mode at the beginning of selections (`I` to insert ascii instead of hex)
+* `i` to enter insert mode at the beginning of selections (`I` to insert hex instead of ascii)
     * `a` instead of `i` to enter append mode instead
     * `c` instead of `i` to delete selection contents, then enter insert mode
     * `<c-n>` to insert a null byte in ascii mode
     * `<c-o>` to switch between ascii and hex inserting
 * `(` and `)` to cycle main selection
 * `<space>` to keep only main selection, `<a-space>` to keep all selections but main
-* `r<digit><digit>` to replace a each selected character with the character given by the two hex digits
-    * `R<key>` instead of `r` to replace with a single ascii character instead
+* `r<key>` to replace a each selected character with the ASCII character given
+    * `R<digit><digit>` instead of `r` to replace with a single hex character instead
     * `r<c-n>` to replace with null bytes
 * `y` to yank/copy selections to register `"`
 * `p` to paste register `"` contents from `y`/`d`/`c`
-* `s` to collapse selections to those matching a hex pattern (`S` for text pattern)
+* `s` to collapse selections to those matching a text pattern (`S` for hex pattern)
 
 Entering a pattern:
 

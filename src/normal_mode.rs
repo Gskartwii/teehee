@@ -66,18 +66,18 @@ fn default_maps() -> KeyMap<Action> {
             ('P' => Action::Paste{after: false, register: '"'}),
             ('d' => Action::Delete{register: '"'}),
             ('y' => Action::Yank{register: '"'}),
-            ('c' => Action::Change{hex: true, register: '"'}),
-            ('C' => Action::Change{hex: false, register: '"'}),
+            ('c' => Action::Change{hex: false, register: '"'}),
+            ('C' => Action::Change{hex: true, register: '"'}),
 
-            ('i' => Action::Insert{hex: true}),
-            ('I' => Action::Insert{hex: false}),
-            ('a' => Action::Append{hex: true}),
-            ('A' => Action::Append{hex: false}),
-            ('r' => Action::ReplaceMode{hex: true}),
-            ('R' => Action::ReplaceMode{hex: false}),
+            ('i' => Action::Insert{hex: false}),
+            ('I' => Action::Insert{hex: true}),
+            ('a' => Action::Append{hex: false}),
+            ('A' => Action::Append{hex: true}),
+            ('r' => Action::ReplaceMode{hex: false}),
+            ('R' => Action::ReplaceMode{hex: true}),
 
-            ('s' => Action::CollapseMode{hex: true}),
-            ('S' => Action::CollapseMode{hex: false})
+            ('s' => Action::CollapseMode{hex: false}),
+            ('S' => Action::CollapseMode{hex: true})
         ),
     }
 }
