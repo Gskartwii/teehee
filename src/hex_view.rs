@@ -856,7 +856,7 @@ impl HexView {
             return Ok(());
         }
 
-        let main_cursor_offset = dbg!(self.buffer.selection.main_cursor_offset());
+        let main_cursor_offset = self.buffer.selection.main_cursor_offset();
         let visible_bytes = self.visible_bytes();
         if main_cursor_offset < visible_bytes.start {
             self.start_offset = main_cursor_offset - main_cursor_offset % self.bytes_per_line;
