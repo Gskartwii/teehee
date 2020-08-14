@@ -36,11 +36,14 @@ Teehee supports multiple selections, efficient selection modifying commands and 
 * `;` to collapse selections to cursors
 * `<a-;>` (alt and ;) to swap cursor and selection end
 * `<a-s>` (alt and s) to split selection to multiple selections of size...
-    * `b`: 1 Byte
+    * `b`: 1 byte
     * `w`: 2 bytes (Word)
     * `d`: 4 bytes (Dword)
     * `q`: 8 bytes (Qword)
     * `o`: 16 bytes (Oword)
+    * `n`: delimited by null bytes
+    * `<count>`: any number of the above
+    * `/`: matching a hex pattern (`?` for text pattern)
 * `d` to delete selected data from buffer
 * `i` to enter insert mode at the beginning of selections (`I` to insert ascii instead of hex)
     * `a` instead of `i` to enter append mode instead
@@ -54,3 +57,12 @@ Teehee supports multiple selections, efficient selection modifying commands and 
     * `r<c-n>` to replace with null bytes
 * `y` to yank/copy selections to register `"`
 * `p` to paste register `"` contents from `y`/`d`/`c`
+* `s` to collapse selections to those matching a hex pattern (`S` for text pattern)
+
+Entering a pattern:
+
+* `<C-w>` to insert a wildcard
+* `<C-o>` to switch input mode (ascii <-> hex)
+* `<esc>` to go back to normal mode
+* `<enter>` to accept pattern
+* arrow keys, `<backspace>` and `<delete>` also supported
