@@ -468,11 +468,19 @@ impl HexView {
             priority: Priority::Selection,
         }
     }
-    fn caret_style(&self) -> PrioritizedStyle {
+    fn active_caret_style(&self) -> PrioritizedStyle {
         PrioritizedStyle {
             style: style::ContentStyle::new()
                 .foreground(style::Color::AnsiValue(16))
                 .background(style::Color::White),
+            priority: Priority::Cursor,
+        }
+    }
+    fn inactive_caret_style(&self) -> PrioritizedStyle {
+        PrioritizedStyle {
+            style: style::ContentStyle::new()
+                .foreground(style::Color::Black)
+                .background(style::Color::DarkGrey),
             priority: Priority::Cursor,
         }
     }
@@ -517,19 +525,24 @@ impl HexView {
                 if selected_regions[0].caret == i {
                     let base_style = command_stack.last().unwrap().clone();
                     let mut caret_cmd = mark_commands[normalized].clone();
+                    let caret_style = if selected_regions[0].is_main() {
+                        self.active_caret_style()
+                    } else {
+                        self.inactive_caret_style()
+                    };
                     if self.mode.has_half_cursor() {
                         if i == selected_regions[0].min() {
                             caret_cmd = caret_cmd
-                                .with_mid_style(self.caret_style())
+                                .with_mid_style(caret_style)
                                 .with_end_style(base_style);
                         } else {
                             caret_cmd = caret_cmd
                                 .with_start_style(base_style)
-                                .with_mid_style(self.caret_style());
+                                .with_mid_style(caret_style);
                         }
                     } else {
                         caret_cmd = caret_cmd
-                            .with_start_style(self.caret_style())
+                            .with_start_style(caret_style)
                             .with_end_style(base_style);
                     }
                     mark_commands[normalized] = caret_cmd;

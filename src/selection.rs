@@ -14,10 +14,12 @@ pub struct Selection {
 
 impl Default for Selection {
     fn default() -> Selection {
-        Selection {
-            regions: vec![Default::default()],
+        let mut sel = Selection {
+            regions: vec![SelRegion::new(0, 0)],
             main_selection: 0,
-        }
+        };
+        sel.regions[0].main = true;
+        sel
     }
 }
 
