@@ -8,12 +8,13 @@ use super::buffer::*;
 use super::keymap::*;
 use super::mode::*;
 use super::modes::normal::Normal;
-use super::modes::search::{Pattern, Search, SearchAcceptor};
+use super::modes::search::{Pattern, PatternPiece, Search, SearchAcceptor};
 use super::selection::*;
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use jetscii::ByteSubstring;
 use lazy_static::lazy_static;
+use regex::bytes::RegexBuilder;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct Split {
@@ -47,8 +48,12 @@ lazy_static! {
 
 impl SearchAcceptor for Split {
     fn apply_search(&self, pattern: Pattern, buffer: &mut Buffer, _: usize) -> ModeTransition {
-        if let Some(basic_subslice) = pattern.as_basic_slice() {
-            let matched_ranges = buffer
+        if pattern.pieces.is_empty() {
+            return ModeTransition::new_mode(Normal());
+        }
+
+        let matched_ranges = if let Some(basic_subslice) = pattern.as_basic_slice() {
+            buffer
                 .selection
                 .iter()
                 .map(|x| {
@@ -66,51 +71,73 @@ impl SearchAcceptor for Split {
                     }
                     matched_ranges
                 })
-                .collect::<Vec<_>>();
-
-            let matched_len: usize = matched_ranges
+                .collect::<Vec<_>>()
+        } else {
+            let expr = pattern
+                .pieces
                 .iter()
-                .flatten()
-                .map(|r| r.end - r.start)
-                .sum();
-            if matched_len == buffer.selection.len_bytes() {
-                // Everything selected was matched: refuse to split because it would yield
-                // an empty selection (invalid)
-                return ModeTransition::new_mode(Normal());
-            }
+                .map(|x| match x {
+                    PatternPiece::Wildcard => Cow::from("."),
+                    PatternPiece::Literal(c) => Cow::from(format!("\\x{:02x}", c)),
+                })
+                .collect::<String>();
+            let mut builder = RegexBuilder::new(&expr);
+            builder.unicode(false);
+            let matcher = builder.build().expect("Failed to create pattern");
 
-            let mut remaining_matched_ranges = &matched_ranges[..];
+            buffer
+                .selection
+                .iter()
+                .map(|x| {
+                    matcher
+                        .find_iter(&buffer.data.slice_to_cow(x.min()..=x.max()))
+                        .map(|r| (x.min() + r.start())..(x.min() + r.end()))
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>()
+        };
 
-            return ModeTransition::new_mode_and_dirty(
-                Normal(),
-                buffer.map_selections(|mut base_region| {
-                    let mut out = vec![];
-                    let mut remaining = true;
-
-                    for range in &remaining_matched_ranges[0] {
-                        let (left_region, right_region) =
-                            base_region.split_at_region(range.start, range.end - 1);
-                        if let Some(left) = left_region {
-                            out.push(left);
-                        }
-                        base_region = if let Some(right) = right_region {
-                            right
-                        } else {
-                            remaining = false;
-                            break;
-                        }
-                    }
-                    remaining_matched_ranges = &remaining_matched_ranges[1..];
-
-                    if remaining {
-                        out.push(base_region);
-                    }
-
-                    out
-                }),
-            );
+        let matched_len: usize = matched_ranges
+            .iter()
+            .flatten()
+            .map(|r| r.end - r.start)
+            .sum();
+        if matched_len == buffer.selection.len_bytes() {
+            // Everything selected was matched: refuse to split because it would yield
+            // an empty selection (invalid)
+            return ModeTransition::new_mode(Normal());
         }
-        todo!();
+
+        let mut remaining_matched_ranges = &matched_ranges[..];
+
+        ModeTransition::new_mode_and_dirty(
+            Normal(),
+            buffer.map_selections(|mut base_region| {
+                let mut out = vec![];
+                let mut remaining = true;
+
+                for range in &remaining_matched_ranges[0] {
+                    let (left_region, right_region) =
+                        base_region.split_at_region(range.start, range.end - 1);
+                    if let Some(left) = left_region {
+                        out.push(left);
+                    }
+                    base_region = if let Some(right) = right_region {
+                        right
+                    } else {
+                        remaining = false;
+                        break;
+                    }
+                }
+                remaining_matched_ranges = &remaining_matched_ranges[1..];
+
+                if remaining {
+                    out.push(base_region);
+                }
+
+                out
+            }),
+        )
     }
 }
 
