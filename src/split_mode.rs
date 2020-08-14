@@ -149,7 +149,12 @@ impl Mode for Split {
         }
     }
 
-    fn transition(&self, evt: &Event, buffer: &mut Buffer, _: usize) -> Option<ModeTransition> {
+    fn transition(
+        &self,
+        evt: &Event,
+        buffer: &mut Buffer,
+        bytes_per_line: usize,
+    ) -> Option<ModeTransition> {
         if let Some(action) = DEFAULT_MAPS.event_to_action(evt) {
             let count = self.count.unwrap_or(1);
             Some(match action {
@@ -165,85 +170,15 @@ impl Mode for Split {
                             .collect()
                     }),
                 ),
-                Action::Null => {
-                    let null_positions = buffer
-                        .selection
-                        .iter()
-                        .map(|x| {
-                            let base = x.min();
-
-                            buffer
-                                .data
-                                .slice_to_cow(x.min()..=x.max())
-                                .iter()
-                                .enumerate()
-                                .fold(
-                                    vec![],
-                                    move |mut acc: Vec<RangeInclusive<usize>>, (i, &byte)| {
-                                        if byte == 0 {
-                                            let len = acc.len();
-                                            if len > 0 {
-                                                if *acc[len - 1].end() + 1 == i + base {
-                                                    acc[len - 1] =
-                                                        *acc[len - 1].start()..=(i + base);
-                                                    return acc;
-                                                }
-                                            }
-                                            acc.push((base + i)..=(base + i));
-                                        }
-                                        acc
-                                    },
-                                )
-                                .into_iter()
-                                .filter(|interval| interval.end() - interval.start() + 1 >= count)
-                                .collect::<Vec<_>>()
-                            // we must make a temporary vec here, to not keep the Cow<[u8]>
-                            // borrowed (which it would be otherwise, as iterators are lazy)
-                        })
-                        .collect::<Vec<_>>();
-
-                    let null_bytes_len: usize = null_positions
-                        .iter()
-                        .flatten()
-                        .map(|r| r.end() - r.start())
-                        .sum();
-                    if null_bytes_len == buffer.selection.len_bytes() {
-                        // Everything selected is a null byte: refuse to split because it would yield
-                        // an empty selection (invalid)
-                        return Some(ModeTransition::new_mode(Normal()));
-                    }
-
-                    let mut remaining_null_ranges = &null_positions[..];
-
-                    ModeTransition::new_mode_and_dirty(
-                        Normal(),
-                        buffer.map_selections(|mut base_region| {
-                            let mut out = vec![];
-                            let mut remaining = true;
-
-                            for range in &remaining_null_ranges[0] {
-                                let (left_region, right_region) =
-                                    base_region.split_at_region(*range.start(), *range.end());
-                                if let Some(left) = left_region {
-                                    out.push(left);
-                                }
-                                base_region = if let Some(right) = right_region {
-                                    right
-                                } else {
-                                    remaining = false;
-                                    break;
-                                }
-                            }
-                            remaining_null_ranges = &remaining_null_ranges[1..];
-
-                            if remaining {
-                                out.push(base_region);
-                            }
-
-                            out
-                        }),
-                    )
-                }
+                Action::Null => self.apply_search(
+                    Pattern {
+                        pieces: std::iter::repeat(PatternPiece::Literal(0u8))
+                            .take(count)
+                            .collect(),
+                    },
+                    buffer,
+                    bytes_per_line,
+                ),
                 Action::Search => ModeTransition::new_mode(Search {
                     hex: true,
                     hex_half: None,
