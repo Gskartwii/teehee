@@ -3,10 +3,13 @@ use super::keymap::*;
 use super::mode::*;
 use super::modes::normal::Normal;
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+use jetscii::ByteSubstring;
 use lazy_static::lazy_static;
+use regex::bytes::RegexBuilder;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::ops::Range;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum PatternPiece {
@@ -41,7 +44,7 @@ impl Pattern {
         }
     }
 
-    pub fn as_basic_slice(&self) -> Option<Vec<u8>> {
+    fn as_basic_slice(&self) -> Option<Vec<u8>> {
         self.pieces
             .iter()
             .copied()
@@ -53,6 +56,53 @@ impl Pattern {
                 }
             })
             .collect::<Option<Vec<_>>>()
+    }
+
+    pub fn map_selections_to_matches(&self, buffer: &Buffer) -> Vec<Vec<Range<usize>>> {
+        if let Some(basic_subslice) = self.as_basic_slice() {
+            buffer
+                .selection
+                .iter()
+                .map(|x| {
+                    let mut base = x.min();
+                    let mut matched_ranges = vec![];
+                    let byte_substring = ByteSubstring::new(&basic_subslice);
+
+                    while let Some(start) =
+                        byte_substring.find(&buffer.data.slice_to_cow(base..=x.max()))
+                    {
+                        let match_abs_start = base + start;
+                        matched_ranges
+                            .push(match_abs_start..match_abs_start + basic_subslice.len());
+                        base = match_abs_start + basic_subslice.len();
+                    }
+                    matched_ranges
+                })
+                .collect::<Vec<_>>()
+        } else {
+            let expr = self
+                .pieces
+                .iter()
+                .map(|x| match x {
+                    PatternPiece::Wildcard => Cow::from("."),
+                    PatternPiece::Literal(c) => Cow::from(format!("\\x{:02x}", c)),
+                })
+                .collect::<String>();
+            let mut builder = RegexBuilder::new(&expr);
+            builder.unicode(false);
+            let matcher = builder.build().expect("Failed to create pattern");
+
+            buffer
+                .selection
+                .iter()
+                .map(|x| {
+                    matcher
+                        .find_iter(&buffer.data.slice_to_cow(x.min()..=x.max()))
+                        .map(|r| (x.min() + r.start())..(x.min() + r.end()))
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>()
+        }
     }
 }
 
@@ -104,6 +154,18 @@ fn default_maps() -> KeyMap<Action> {
 
 lazy_static! {
     static ref DEFAULT_MAPS: KeyMap<Action> = default_maps();
+}
+
+impl Search {
+    pub fn new(next: impl SearchAcceptor, hex: bool) -> Search {
+        Search {
+            next: RefCell::new(Some(Box::new(next))),
+            hex,
+            hex_half: None,
+            cursor: 0,
+            pattern: Pattern::default(),
+        }
+    }
 }
 
 impl Mode for Search {

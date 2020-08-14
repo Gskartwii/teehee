@@ -363,7 +363,7 @@ impl SelRegion {
         }
     }
 
-    fn inherit_direction(&self, parent: &SelRegion) -> SelRegion {
+    pub fn inherit_direction(&self, parent: &SelRegion) -> SelRegion {
         if parent.forward() {
             self.to_forward()
         } else {

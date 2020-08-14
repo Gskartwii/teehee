@@ -1,8 +1,6 @@
 use std::borrow::Cow;
-use std::cell::RefCell;
 use std::cmp;
 use std::collections::HashMap;
-use std::ops::RangeInclusive;
 
 use super::buffer::*;
 use super::keymap::*;
@@ -12,9 +10,7 @@ use super::modes::search::{Pattern, PatternPiece, Search, SearchAcceptor};
 use super::selection::*;
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
-use jetscii::ByteSubstring;
 use lazy_static::lazy_static;
-use regex::bytes::RegexBuilder;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct Split {
@@ -25,7 +21,7 @@ pub struct Split {
 enum Action {
     Width(usize),
     Null,
-    Search,
+    Search { hex: bool },
 }
 
 fn default_maps() -> KeyMap<Action> {
@@ -37,7 +33,8 @@ fn default_maps() -> KeyMap<Action> {
             ('q' => Action::Width(8)),
             ('o' => Action::Width(16)),
             ('n' => Action::Null),
-            ('/' => Action::Search)
+            ('/' => Action::Search{hex: true}),
+            ('?' => Action::Search{hex: false})
         ),
     }
 }
@@ -51,52 +48,7 @@ impl SearchAcceptor for Split {
         if pattern.pieces.is_empty() {
             return ModeTransition::new_mode(Normal());
         }
-
-        let matched_ranges = if let Some(basic_subslice) = pattern.as_basic_slice() {
-            buffer
-                .selection
-                .iter()
-                .map(|x| {
-                    let mut base = x.min();
-                    let mut matched_ranges = vec![];
-                    let byte_substring = ByteSubstring::new(&basic_subslice);
-
-                    while let Some(start) =
-                        byte_substring.find(&buffer.data.slice_to_cow(base..=x.max()))
-                    {
-                        let match_abs_start = base + start;
-                        matched_ranges
-                            .push(match_abs_start..match_abs_start + basic_subslice.len());
-                        base = match_abs_start + basic_subslice.len();
-                    }
-                    matched_ranges
-                })
-                .collect::<Vec<_>>()
-        } else {
-            let expr = pattern
-                .pieces
-                .iter()
-                .map(|x| match x {
-                    PatternPiece::Wildcard => Cow::from("."),
-                    PatternPiece::Literal(c) => Cow::from(format!("\\x{:02x}", c)),
-                })
-                .collect::<String>();
-            let mut builder = RegexBuilder::new(&expr);
-            builder.unicode(false);
-            let matcher = builder.build().expect("Failed to create pattern");
-
-            buffer
-                .selection
-                .iter()
-                .map(|x| {
-                    matcher
-                        .find_iter(&buffer.data.slice_to_cow(x.min()..=x.max()))
-                        .map(|r| (x.min() + r.start())..(x.min() + r.end()))
-                        .collect::<Vec<_>>()
-                })
-                .collect::<Vec<_>>()
-        };
-
+        let matched_ranges = pattern.map_selections_to_matches(&buffer);
         let matched_len: usize = matched_ranges
             .iter()
             .flatten()
@@ -179,13 +131,7 @@ impl Mode for Split {
                     buffer,
                     bytes_per_line,
                 ),
-                Action::Search => ModeTransition::new_mode(Search {
-                    hex: true,
-                    hex_half: None,
-                    cursor: 0,
-                    pattern: Pattern::default(),
-                    next: RefCell::new(Some(Box::new(*self))),
-                }),
+                Action::Search { hex } => ModeTransition::new_mode(Search::new(*self, hex)),
             })
         } else if let Event::Key(KeyEvent {
             code: KeyCode::Char(ch),

@@ -22,6 +22,7 @@ enum Action {
     SplitMode,
     JumpToMode,
     ExtendToMode,
+    CollapseMode { hex: bool },
     SwapCaret,
     CollapseSelection,
     Delete { register: char },
@@ -73,7 +74,10 @@ fn default_maps() -> KeyMap<Action> {
             ('a' => Action::Append{hex: true}),
             ('A' => Action::Append{hex: false}),
             ('r' => Action::ReplaceMode{hex: true}),
-            ('R' => Action::ReplaceMode{hex: false})
+            ('R' => Action::ReplaceMode{hex: false}),
+
+            ('s' => Action::CollapseMode{hex: true}),
+            ('S' => Action::CollapseMode{hex: false})
         ),
     }
 }
@@ -203,6 +207,9 @@ impl Mode for Normal {
                         .len())
                         .into()]))
                 }
+                Action::CollapseMode { hex } => ModeTransition::new_mode(
+                    modes::search::Search::new(modes::collapse::Collapse(), hex),
+                ),
             })
         } else {
             None
