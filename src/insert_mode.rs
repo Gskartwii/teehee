@@ -105,18 +105,34 @@ impl Mode for Insert {
     }
     fn transition(&self, evt: &Event, buffer: &mut Buffer, _: usize) -> Option<ModeTransition> {
         if let Some(action) = DEFAULT_MAPS.event_to_action(evt) {
+            let new_state = if self.hex_half.is_some() {
+                Insert {
+                    before: self.before,
+                    hex: self.hex,
+                    hex_half: None,
+                }
+            } else {
+                *self
+            };
             Some(match action {
                 Action::Exit => ModeTransition::new_mode(Normal()),
                 Action::InsertNull => {
                     let inserted_bytes = vec![0];
                     let delta = ops::insert(&buffer.data, &buffer.selection, inserted_bytes);
-                    ModeTransition::DirtyBytes(buffer.apply_delta(&delta))
+                    ModeTransition::new_mode_and_dirty(new_state, buffer.apply_delta(&delta))
                 }
                 Action::SwitchInputMode => ModeTransition::new_mode(Insert {
                     before: self.before,
                     hex: !self.hex,
                     hex_half: None,
                 }),
+                Action::RemoveLast | Action::RemoveThis if self.hex_half.is_some() => {
+                    if buffer.data.is_empty() {
+                        return Some(ModeTransition::None);
+                    }
+                    let delta = ops::delete_cursor(&buffer.data, &buffer.selection);
+                    ModeTransition::new_mode_and_dirty(new_state, buffer.apply_delta(&delta))
+                }
                 Action::RemoveLast => {
                     if buffer.data.is_empty() {
                         return Some(ModeTransition::None);
