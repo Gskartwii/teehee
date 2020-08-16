@@ -97,12 +97,12 @@ impl Selection {
                 if max_len == region.caret {
                     new_max_len
                 } else {
-                    std::cmp::min(new_max_len - 1, transformer.transform(region.caret, true))
+                    std::cmp::min(new_max_len, transformer.transform(region.caret, true))
                 },
                 if max_len == region.tail {
                     new_max_len
                 } else {
-                    std::cmp::min(new_max_len - 1, transformer.transform(region.tail, true))
+                    std::cmp::min(new_max_len, transformer.transform(region.tail, true))
                 },
             );
             vec![new_region]
@@ -114,6 +114,7 @@ impl Selection {
         delta: &RopeDelta,
         caret_offset: isize,
         tail_offset: isize,
+        max_len: usize,
     ) {
         let new_max_len = delta.new_document_len();
         if new_max_len == 0 {
@@ -124,14 +125,23 @@ impl Selection {
         let mut transformer = Transformer::new(delta);
         self.map_selections(|region| {
             let new_region = SelRegion::new(
-                std::cmp::min(
-                    new_max_len - 1,
-                    (transformer.transform(region.caret, true) as isize + caret_offset) as usize,
-                ),
-                std::cmp::min(
-                    new_max_len - 1,
-                    (transformer.transform(region.tail, true) as isize + tail_offset) as usize,
-                ),
+                if max_len == region.caret {
+                    (new_max_len as isize + caret_offset) as usize
+                } else {
+                    std::cmp::min(
+                        new_max_len,
+                        (transformer.transform(region.caret, true) as isize + caret_offset)
+                            as usize,
+                    )
+                },
+                if max_len == region.tail {
+                    (new_max_len as isize + tail_offset) as usize
+                } else {
+                    std::cmp::min(
+                        new_max_len,
+                        (transformer.transform(region.tail, true) as isize + tail_offset) as usize,
+                    )
+                },
             );
             vec![new_region]
         })

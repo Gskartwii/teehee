@@ -70,7 +70,7 @@ impl Buffer {
         tail_offset: isize,
     ) -> DirtyBytes {
         self.selection
-            .apply_delta_offset_carets(delta, caret_offset, tail_offset);
+            .apply_delta_offset_carets(delta, caret_offset, tail_offset, self.data.len());
         self.data = self.data.apply_delta(&delta);
 
         DirtyBytes::ChangeLength
