@@ -181,10 +181,13 @@ impl<'a> Iterator for ChunkIter<'a> {
         if self.cursor.pos() >= self.end {
             return None;
         }
-        let (leaf, start_pos) = self.cursor.get_leaf().unwrap();
-        let len = std::cmp::min(self.end - self.cursor.pos(), leaf.len() - start_pos);
-        self.cursor.next_leaf();
-        Some(&leaf.0[start_pos..start_pos + len])
+        if let Some((leaf, start_pos)) = self.cursor.get_leaf() {
+            let len = std::cmp::min(self.end - self.cursor.pos(), leaf.len() - start_pos);
+            self.cursor.next_leaf();
+            Some(&leaf.0[start_pos..start_pos + len])
+        } else {
+            None
+        }
     }
 }
 

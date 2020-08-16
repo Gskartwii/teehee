@@ -410,6 +410,7 @@ impl HexView {
         bytes: &[u8],
         offset: usize,
         mark_commands: &[StylingCommand],
+        end_style: Option<StylingCommand>,
     ) -> Result<()> {
         let row_num = self.offset_to_row(offset).unwrap();
 
@@ -422,24 +423,52 @@ impl HexView {
             stdout,
             bytes.iter().copied().zip(mark_commands.iter().cloned()),
         )?;
-        queue!(
-            stdout,
-            style::Print(make_padding(
-                (self.bytes_per_line - bytes.len()) % self.bytes_per_line * 3
-            )),
-        )?;
+
+        let mut padding_length = (self.bytes_per_line - bytes.len()) % self.bytes_per_line * 3;
+        if let Some(style_cmd) = &end_style {
+            if padding_length > 0 {
+                padding_length -= 2;
+            } else {
+                padding_length = self.bytes_per_line * 3 - 2;
+            }
+
+            if let Some(start_cmd) = style_cmd.start_style() {
+                queue_style(stdout, start_cmd)?;
+            }
+            queue!(stdout, style::Print(" "))?;
+            if let Some(mid_cmd) = style_cmd.mid_style() {
+                queue_style(stdout, mid_cmd)?;
+            }
+            queue!(stdout, style::Print(" "))?;
+            if let Some(end_cmd) = style_cmd.end_style() {
+                queue_style(stdout, end_cmd)?;
+            }
+        }
+
+        queue!(stdout, style::Print(make_padding(padding_length)))?;
         self.draw_separator(stdout)?;
         self.draw_ascii_row(
             stdout,
             bytes.iter().copied().zip(mark_commands.iter().cloned()),
         )?;
+        if let Some(style_cmd) = end_style {
+            if let Some(start_cmd) = style_cmd.start_style() {
+                queue_style(stdout, start_cmd)?;
+            }
+            queue!(stdout, style::Print(" "))?;
+            if let Some(end_cmd) = style_cmd.end_style() {
+                queue_style(stdout, end_cmd)?;
+            }
+        }
+        queue!(stdout, terminal::Clear(terminal::ClearType::UntilNewLine))?;
+
         Ok(())
     }
 
     fn visible_bytes(&self) -> Range<usize> {
         self.start_offset
             ..cmp::min(
-                self.buffer.data.len(),
+                self.buffer.data.len() + 1,
                 self.start_offset + (self.size.1 - 1) as usize * self.bytes_per_line,
             )
     }
@@ -674,45 +703,31 @@ impl HexView {
         Ok(())
     }
 
-    fn draw_empty(&self, stdout: &mut impl Write) -> Result<()> {
-        queue!(stdout, cursor::MoveTo(0, 0), style::Print(" ".to_string()),)?;
-
-        queue_style(stdout, &self.empty_caret_style().style)?;
-        queue!(stdout, style::Print("  "))?;
-        queue_style(stdout, &self.default_style().style)?;
-
-        queue!(
-            stdout,
-            style::Print(make_padding(
-                (self.bytes_per_line - 1) % self.bytes_per_line * 3
-            )),
-        )?;
-        self.draw_separator(stdout)?;
-        queue_style(stdout, &self.empty_caret_style().style)?;
-        queue!(stdout, style::Print(" "))?;
-        queue_style(stdout, &self.default_style().style)?;
-
-        let new_full_rows = 0;
-        if new_full_rows != self.last_visible_rows.get() {
-            queue!(stdout, terminal::Clear(terminal::ClearType::FromCursorDown))?;
-            self.last_visible_rows.set(new_full_rows);
-        }
-
-        Ok(())
+    fn overflow_cursor_style(&self) -> Option<StylingCommand> {
+        self.buffer.overflow_sel_style().map(|style| {
+            match style {
+                OverflowSelectionStyle::CursorTail | OverflowSelectionStyle::Cursor
+                    if self.mode.has_half_cursor() =>
+                {
+                    StylingCommand::default().with_mid_style(self.empty_caret_style())
+                }
+                OverflowSelectionStyle::CursorTail | OverflowSelectionStyle::Cursor => {
+                    StylingCommand::default().with_start_style(self.empty_caret_style())
+                }
+                OverflowSelectionStyle::Tail => StylingCommand::default(),
+            }
+            .with_end_style(self.default_style())
+        })
     }
 
     fn draw_rows(&self, stdout: &mut impl Write, invalidated_rows: &HashSet<u16>) -> Result<()> {
-        if self.buffer.data.is_empty() {
-            self.draw_empty(stdout)?;
-            return Ok(());
-        }
         let visible_bytes = self.visible_bytes();
         let start_index = visible_bytes.start;
         let end_index = visible_bytes.end;
 
         let visible_bytes_cow = self.buffer.data.slice_to_cow(start_index..end_index);
 
-        let max_bytes = end_index - start_index;
+        let max_bytes = visible_bytes_cow.len();
         let mark_commands = self.mark_commands(visible_bytes.clone());
 
         for i in visible_bytes.step_by(self.bytes_per_line) {
@@ -727,6 +742,11 @@ impl HexView {
                 &visible_bytes_cow[normalized_i..normalized_end],
                 i,
                 &mark_commands[normalized_i..normalized_end],
+                if i + self.bytes_per_line > self.buffer.data.len() {
+                    self.overflow_cursor_style()
+                } else {
+                    None
+                },
             )?;
         }
 
@@ -735,10 +755,6 @@ impl HexView {
 
     fn draw(&self, stdout: &mut impl Write) -> Result<time::Duration> {
         let begin = time::Instant::now();
-        if self.buffer.data.is_empty() {
-            self.draw_empty(stdout)?;
-            return Ok(begin.elapsed());
-        }
 
         queue!(stdout, cursor::MoveTo(0, 0))?;
 
@@ -747,7 +763,7 @@ impl HexView {
         let end_index = visible_bytes.end;
         let visible_bytes_cow = self.buffer.data.slice_to_cow(start_index..end_index);
 
-        let max_bytes = end_index - start_index;
+        let max_bytes = visible_bytes_cow.len();
         let mark_commands = self.mark_commands(visible_bytes.clone());
 
         for i in visible_bytes.step_by(self.bytes_per_line) {
@@ -758,6 +774,11 @@ impl HexView {
                 &visible_bytes_cow[normalized_i..normalized_end],
                 i,
                 &mark_commands[normalized_i..normalized_end],
+                if i + self.bytes_per_line > self.buffer.data.len() {
+                    self.overflow_cursor_style()
+                } else {
+                    None
+                },
             )?;
         }
         queue!(stdout, terminal::Clear(terminal::ClearType::UntilNewLine))?;
@@ -850,12 +871,6 @@ impl HexView {
     }
 
     fn maybe_update_offset_and_draw(&mut self, stdout: &mut impl Write) -> Result<()> {
-        if self.buffer.data.is_empty() {
-            self.start_offset = 0;
-            self.draw_empty(stdout)?;
-            return Ok(());
-        }
-
         let main_cursor_offset = self.buffer.selection.main_cursor_offset();
         let visible_bytes = self.visible_bytes();
         if main_cursor_offset < visible_bytes.start {

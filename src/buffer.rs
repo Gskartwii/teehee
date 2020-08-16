@@ -6,6 +6,13 @@ use super::byte_rope::*;
 use super::mode::*;
 use super::selection::*;
 
+#[derive(Debug, PartialEq, Clone, Copy, Eq, Hash)]
+pub enum OverflowSelectionStyle {
+    Cursor,
+    Tail,
+    CursorTail,
+}
+
 pub struct Buffer {
     pub data: Rope,
     pub selection: Selection,
@@ -50,7 +57,7 @@ impl Buffer {
     }
 
     pub fn apply_delta(&mut self, delta: &RopeDelta) -> DirtyBytes {
-        self.selection.apply_delta(&delta);
+        self.selection.apply_delta(&delta, self.data.len());
         self.data = self.data.apply_delta(&delta);
 
         DirtyBytes::ChangeLength
@@ -110,5 +117,19 @@ impl Buffer {
             .map(|region| self.data.slice_to_cow(region.min()..=region.max()).to_vec())
             .collect();
         self.registers.insert(reg, selections);
+    }
+
+    pub fn overflow_sel_style(&self) -> Option<OverflowSelectionStyle> {
+        let last_sel = self.selection.iter().last().unwrap();
+        let len = self.data.len();
+        if last_sel.caret == len && last_sel.tail == len {
+            Some(OverflowSelectionStyle::CursorTail)
+        } else if last_sel.caret == len {
+            Some(OverflowSelectionStyle::Cursor)
+        } else if last_sel.tail == len {
+            Some(OverflowSelectionStyle::Tail)
+        } else {
+            None
+        }
     }
 }

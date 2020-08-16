@@ -84,7 +84,7 @@ impl Selection {
         &self.regions[first..last]
     }
 
-    pub fn apply_delta(&mut self, delta: &RopeDelta) {
+    pub fn apply_delta(&mut self, delta: &RopeDelta, max_len: usize) {
         let new_max_len = delta.new_document_len();
         if new_max_len == 0 {
             self.clear();
@@ -94,8 +94,16 @@ impl Selection {
         let mut transformer = Transformer::new(delta);
         self.map_selections(|region| {
             let new_region = SelRegion::new(
-                std::cmp::min(new_max_len - 1, transformer.transform(region.caret, true)),
-                std::cmp::min(new_max_len - 1, transformer.transform(region.tail, true)),
+                if max_len == region.caret {
+                    new_max_len
+                } else {
+                    std::cmp::min(new_max_len - 1, transformer.transform(region.caret, true))
+                },
+                if max_len == region.tail {
+                    new_max_len
+                } else {
+                    std::cmp::min(new_max_len - 1, transformer.transform(region.tail, true))
+                },
             );
             vec![new_region]
         })
@@ -250,9 +258,9 @@ impl SelRegion {
         let old_caret = self.caret;
         let caret_location = match direction {
             Direction::Up => cmp::max(0, old_caret as isize - bytes_per_line as isize) as usize,
-            Direction::Down => cmp::min(max_size - 1, old_caret + bytes_per_line),
+            Direction::Down => cmp::min(max_size, old_caret + bytes_per_line),
             Direction::Left => cmp::max(0, old_caret as isize - 1) as usize,
-            Direction::Right => cmp::min(max_size - 1, old_caret + 1),
+            Direction::Right => cmp::min(max_size, old_caret + 1),
         };
         SelRegion::new(caret_location, caret_location)
     }
@@ -270,9 +278,9 @@ impl SelRegion {
         let old_caret = self.caret;
         let caret_location = match direction {
             Direction::Up => cmp::max(0, old_caret as isize - bytes_per_line as isize) as usize,
-            Direction::Down => cmp::min(max_size - 1, old_caret + bytes_per_line),
+            Direction::Down => cmp::min(max_size, old_caret + bytes_per_line),
             Direction::Left => cmp::max(0, old_caret as isize - 1) as usize,
-            Direction::Right => cmp::min(max_size - 1, old_caret + 1),
+            Direction::Right => cmp::min(max_size, old_caret + 1),
         };
         SelRegion::new(caret_location, self.tail)
     }
@@ -289,7 +297,7 @@ impl SelRegion {
 
         let caret_location = match direction {
             Direction::Up => 0,
-            Direction::Down => max_size - 1,
+            Direction::Down => max_size - 1, // Don't do overflow selection in jumps
             Direction::Left => self.caret - (self.caret % bytes_per_line),
             Direction::Right => std::cmp::min(
                 self.caret + bytes_per_line - (self.caret % bytes_per_line) - 1,
@@ -311,7 +319,7 @@ impl SelRegion {
 
         let caret_location = match direction {
             Direction::Up => 0,
-            Direction::Down => max_size - 1,
+            Direction::Down => max_size - 1, // Don't do overflow selection in jumps
             Direction::Left => self.caret - (self.caret % bytes_per_line),
             Direction::Right => std::cmp::min(
                 self.caret + bytes_per_line - (self.caret % bytes_per_line) - 1,
