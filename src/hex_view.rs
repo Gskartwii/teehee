@@ -876,7 +876,7 @@ impl HexView {
         if main_cursor_offset < visible_bytes.start {
             self.start_offset = main_cursor_offset - main_cursor_offset % self.bytes_per_line;
         } else if main_cursor_offset >= visible_bytes.end {
-            let bytes_per_screen = self.size.1 as usize * self.bytes_per_line;
+            let bytes_per_screen = (self.size.1 as usize - 1) * self.bytes_per_line; // -1 for statusline
             self.start_offset = (main_cursor_offset - main_cursor_offset % self.bytes_per_line
                 + self.bytes_per_line)
                 .saturating_sub(bytes_per_screen);
