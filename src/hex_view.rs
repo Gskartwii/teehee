@@ -326,6 +326,7 @@ pub struct HexView {
     last_draw_time: time::Duration,
 
     mode: Box<dyn Mode>,
+    info: Option<String>,
 }
 
 impl HexView {
@@ -341,6 +342,7 @@ impl HexView {
             last_draw_time: Default::default(),
 
             mode: Box::new(modes::normal::Normal()),
+            info: None,
         }
     }
 
@@ -686,11 +688,25 @@ impl HexView {
 
     fn draw_statusline(&self, stdout: &mut impl Write) -> Result<()> {
         let line_length = self.calculate_powerline_length();
-        queue!(
-            stdout,
-            cursor::MoveTo(self.size.0 - line_length as u16, self.size.1),
-            terminal::Clear(terminal::ClearType::CurrentLine),
-        )?;
+        if let Some(info) = &self.info {
+            queue!(
+                stdout,
+                cursor::MoveTo(0, self.size.1 - 1),
+                terminal::Clear(terminal::ClearType::CurrentLine),
+                style::PrintStyledContent(
+                    style::style(info)
+                        .with(style::Color::White)
+                        .on(style::Color::Blue)
+                ),
+                cursor::MoveTo(self.size.0 - line_length as u16, self.size.1),
+            )?;
+        } else {
+            queue!(
+                stdout,
+                cursor::MoveTo(self.size.0 - line_length as u16, self.size.1),
+                terminal::Clear(terminal::ClearType::CurrentLine),
+            )?;
+        }
 
         self.draw_statusline_here(stdout)?;
         if let Some(statusliner) = self.mode.as_any().downcast_ref::<modes::search::Search>() {
@@ -916,6 +932,7 @@ impl HexView {
     }
 
     fn transition(&mut self, stdout: &mut impl Write, transition: ModeTransition) -> Result<()> {
+        self.info = None;
         match transition {
             ModeTransition::None => Ok(()),
             ModeTransition::DirtyBytes(dirty_bytes) => {
@@ -928,6 +945,11 @@ impl HexView {
             ModeTransition::ModeAndDirtyBytes(mode, dirty_bytes) => {
                 self.mode = mode;
                 self.transition_dirty_bytes(stdout, dirty_bytes)
+            }
+            ModeTransition::ModeAndInfo(mode, info) => {
+                self.mode = mode;
+                self.info = Some(info);
+                Ok(())
             }
         }
     }

@@ -35,6 +35,7 @@ pub enum ModeTransition {
     NewMode(Box<dyn Mode>),
     DirtyBytes(DirtyBytes),
     ModeAndDirtyBytes(Box<dyn Mode>, DirtyBytes),
+    ModeAndInfo(Box<dyn Mode>, String),
 }
 
 impl ModeTransition {
@@ -43,5 +44,8 @@ impl ModeTransition {
     }
     pub fn new_mode_and_dirty(mode: impl Mode, dirty: DirtyBytes) -> ModeTransition {
         ModeTransition::ModeAndDirtyBytes(Box::new(mode), dirty)
+    }
+    pub fn new_mode_and_info(mode: impl Mode, info: String) -> ModeTransition {
+        ModeTransition::ModeAndInfo(Box::new(mode), info)
     }
 }

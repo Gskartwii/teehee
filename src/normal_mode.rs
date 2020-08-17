@@ -37,6 +37,7 @@ enum Action {
     SelectNext,
     SelectAll,
     ReplaceMode { hex: bool },
+    Measure,
 }
 
 fn default_maps() -> KeyMap<Action> {
@@ -61,6 +62,7 @@ fn default_maps() -> KeyMap<Action> {
             (alt ' ' => Action::RemoveMain),
             ('(' => Action::SelectPrev),
             (')' => Action::SelectNext),
+            ('M' => Action::Measure),
 
             ('p' => Action::Paste{after: true, register: '"'}),
             ('P' => Action::Paste{after: false, register: '"'}),
@@ -209,6 +211,10 @@ impl Mode for Normal {
                 }
                 Action::CollapseMode { hex } => ModeTransition::new_mode(
                     modes::search::Search::new(modes::collapse::Collapse(), hex),
+                ),
+                Action::Measure => ModeTransition::new_mode_and_info(
+                    Normal(),
+                    format!("{} = 0x{:x} bytes", buffer.selection.main().len(), buffer.selection.main().len()),
                 ),
             })
         } else {
