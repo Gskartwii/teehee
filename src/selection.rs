@@ -38,17 +38,18 @@ impl Selection {
         self.regions.iter().map(SelRegion::len).sum()
     }
 
-    pub fn retain_main(&mut self) {
-        let main = self.regions[self.main_selection];
+    pub fn retain(&mut self, index: usize) {
+        let mut main = self.regions[index];
         self.main_selection = 0;
+        main.main = true;
         self.regions = vec![main];
     }
 
-    pub fn remove_main(&mut self) {
+    pub fn remove(&mut self, index: usize) {
         if self.regions.len() == 1 {
             return;
         }
-        self.regions.remove(self.main_selection);
+        self.regions.remove(index);
         self.main_selection = std::cmp::min(self.regions.len() - 1, self.main_selection);
         self.regions[self.main_selection].main = true;
     }
@@ -179,15 +180,17 @@ impl Selection {
         self.regions.iter()
     }
 
-    pub fn select_next(&mut self) {
+    pub fn select_next(&mut self, count: usize) {
         self.regions[self.main_selection].main = false;
-        self.main_selection = (self.main_selection + 1) % self.regions.len();
+        self.main_selection = (self.main_selection + count) % self.regions.len();
         self.regions[self.main_selection].main = true;
     }
 
-    pub fn select_prev(&mut self) {
+    pub fn select_prev(&mut self, count: usize) {
         self.regions[self.main_selection].main = false;
-        self.main_selection = (self.main_selection + self.regions.len() - 1) % self.regions.len();
+        self.main_selection = (self.main_selection + self.regions.len()
+            - count % self.regions.len())
+            % self.regions.len();
         self.regions[self.main_selection].main = true;
     }
 }
@@ -260,6 +263,7 @@ impl SelRegion {
         direction: Direction,
         bytes_per_line: usize,
         max_size: usize,
+        count: usize,
     ) -> SelRegion {
         if max_size == 0 {
             return *self;
@@ -267,10 +271,13 @@ impl SelRegion {
 
         let old_caret = self.caret;
         let caret_location = match direction {
-            Direction::Up => cmp::max(0, old_caret as isize - bytes_per_line as isize) as usize,
-            Direction::Down => cmp::min(max_size, old_caret + bytes_per_line),
-            Direction::Left => cmp::max(0, old_caret as isize - 1) as usize,
-            Direction::Right => cmp::min(max_size, old_caret + 1),
+            Direction::Up => cmp::max(
+                0,
+                old_caret as isize - (bytes_per_line as isize).saturating_mul(count as isize),
+            ) as usize,
+            Direction::Down => cmp::min(max_size, old_caret + bytes_per_line.saturating_mul(count)),
+            Direction::Left => cmp::max(0, old_caret as isize - count as isize) as usize,
+            Direction::Right => cmp::min(max_size, old_caret + count),
         };
         SelRegion::new(caret_location, caret_location)
     }
@@ -280,6 +287,7 @@ impl SelRegion {
         direction: Direction,
         bytes_per_line: usize,
         max_size: usize,
+        count: usize,
     ) -> SelRegion {
         if max_size == 0 {
             return *self;
@@ -287,10 +295,13 @@ impl SelRegion {
 
         let old_caret = self.caret;
         let caret_location = match direction {
-            Direction::Up => cmp::max(0, old_caret as isize - bytes_per_line as isize) as usize,
-            Direction::Down => cmp::min(max_size, old_caret + bytes_per_line),
-            Direction::Left => cmp::max(0, old_caret as isize - 1) as usize,
-            Direction::Right => cmp::min(max_size, old_caret + 1),
+            Direction::Up => cmp::max(
+                0,
+                old_caret as isize - (bytes_per_line as isize).saturating_mul(count as isize),
+            ) as usize,
+            Direction::Down => cmp::min(max_size, old_caret + bytes_per_line.saturating_mul(count)),
+            Direction::Left => cmp::max(0, old_caret as isize - count as isize) as usize,
+            Direction::Right => cmp::min(max_size, old_caret + count),
         };
         SelRegion::new(caret_location, self.tail)
     }

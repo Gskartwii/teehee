@@ -137,6 +137,7 @@ impl Mode for Normal {
                                 Direction::Right,
                                 bytes_per_line,
                                 max_size,
+                                1,
                             )]
                         })
                     },
@@ -147,15 +148,31 @@ impl Mode for Normal {
                 }),
                 Action::Move(direction) => {
                     let max_bytes = buffer.data.len();
-                    ModeTransition::DirtyBytes(buffer.map_selections(|region| {
-                        vec![region.simple_move(direction, bytes_per_line, max_bytes)]
-                    }))
+                    ModeTransition::new_mode_and_dirty(
+                        Normal::new(),
+                        buffer.map_selections(|region| {
+                            vec![region.simple_move(
+                                direction,
+                                bytes_per_line,
+                                max_bytes,
+                                self.count_state.to_count(),
+                            )]
+                        }),
+                    )
                 }
                 Action::Extend(direction) => {
                     let max_bytes = buffer.data.len();
-                    ModeTransition::DirtyBytes(buffer.map_selections(|region| {
-                        vec![region.simple_extend(direction, bytes_per_line, max_bytes)]
-                    }))
+                    ModeTransition::new_mode_and_dirty(
+                        Normal::new(),
+                        buffer.map_selections(|region| {
+                            vec![region.simple_extend(
+                                direction,
+                                bytes_per_line,
+                                max_bytes,
+                                self.count_state.to_count(),
+                            )]
+                        }),
+                    )
                 }
                 Action::SwapCaret => ModeTransition::DirtyBytes(
                     buffer.map_selections(|region| vec![region.swap_caret()]),
@@ -202,13 +219,44 @@ impl Mode for Normal {
                         &buffer.selection,
                         &buffer.registers.get(&register).unwrap_or(&vec![vec![]]),
                         after,
+                        self.count_state.to_count(),
                     );
                     ModeTransition::DirtyBytes(buffer.apply_delta(&delta))
                 }
-                Action::RemoveMain => ModeTransition::DirtyBytes(buffer.remove_main_sel()),
-                Action::RetainMain => ModeTransition::DirtyBytes(buffer.retain_main_sel()),
-                Action::SelectNext => ModeTransition::DirtyBytes(buffer.select_next()),
-                Action::SelectPrev => ModeTransition::DirtyBytes(buffer.select_prev()),
+                // selection indexing in the UI starts at 1
+                // hence we check for count > 0 and offset by -1
+                Action::RemoveMain => match self.count_state {
+                    cmd_count::State::Some { count, .. } if count > 0 => {
+                        ModeTransition::new_mode_and_dirty(
+                            Normal::new(),
+                            buffer.remove_selection(count - 1),
+                        )
+                    }
+                    _ => ModeTransition::DirtyBytes(
+                        buffer.remove_selection(buffer.selection.main_selection),
+                    ),
+                },
+                Action::RetainMain => match self.count_state {
+                    cmd_count::State::Some { count, .. } if count > 0 => {
+                        ModeTransition::new_mode_and_dirty(
+                            Normal::new(),
+                            buffer.retain_selection(count - 1),
+                        )
+                    }
+                    _ => ModeTransition::DirtyBytes(
+                        buffer.retain_selection(buffer.selection.main_selection),
+                    ),
+                },
+
+                // new_mode to clear count
+                Action::SelectNext => ModeTransition::new_mode_and_dirty(
+                    Normal::new(),
+                    buffer.select_next(self.count_state.to_count()),
+                ),
+                Action::SelectPrev => ModeTransition::new_mode_and_dirty(
+                    Normal::new(),
+                    buffer.select_prev(self.count_state.to_count()),
+                ),
                 Action::SelectAll => {
                     buffer.selection.select_all(buffer.data.len());
                     ModeTransition::DirtyBytes(DirtyBytes::ChangeInPlace(vec![(0..buffer

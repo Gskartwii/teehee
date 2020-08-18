@@ -54,8 +54,9 @@ pub fn insert(base: &Rope, selection: &Selection, text: impl Into<Rope>) -> Rope
 pub fn paste(
     base: &Rope,
     selection: &Selection,
-    register_contents: &[impl Into<Rope> + Clone],
+    register_contents: &[Vec<u8>],
     after: bool,
+    count: usize,
 ) -> RopeDelta {
     let mut builder = DeltaBuilder::new(base.len());
     let last_value = register_contents.last().unwrap();
@@ -69,7 +70,17 @@ pub fn paste(
             region.min()
         };
         let iv = Interval::new(insert_pos, insert_pos);
-        builder.replace(iv, pasted.to_owned().into().into_node());
+        builder.replace(
+            iv,
+            Rope::from(
+                std::iter::repeat(pasted)
+                    .take(count)
+                    .flatten()
+                    .copied()
+                    .collect::<Vec<_>>(),
+            )
+            .into_node(),
+        );
     }
 
     builder.build()

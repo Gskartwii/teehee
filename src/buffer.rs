@@ -91,17 +91,17 @@ impl Buffer {
         dirty
     }
 
-    pub fn remove_main_sel(&mut self) -> DirtyBytes {
-        self.switch_main_sel(Selection::remove_main)
+    pub fn remove_selection(&mut self, index: usize) -> DirtyBytes {
+        self.modify_sels_in_place(|sel| sel.remove(index % sel.len()))
     }
-    pub fn retain_main_sel(&mut self) -> DirtyBytes {
-        self.modify_sels_in_place(Selection::retain_main)
+    pub fn retain_selection(&mut self, index: usize) -> DirtyBytes {
+        self.modify_sels_in_place(|sel| sel.retain(index % sel.len()))
     }
-    pub fn select_next(&mut self) -> DirtyBytes {
-        self.switch_main_sel(Selection::select_next)
+    pub fn select_next(&mut self, count: usize) -> DirtyBytes {
+        self.switch_main_sel(|sel| sel.select_next(count))
     }
-    pub fn select_prev(&mut self) -> DirtyBytes {
-        self.switch_main_sel(Selection::select_prev)
+    pub fn select_prev(&mut self, count: usize) -> DirtyBytes {
+        self.switch_main_sel(|sel| sel.select_prev(count))
     }
 
     pub fn yank_selections(&mut self, reg: char) {
