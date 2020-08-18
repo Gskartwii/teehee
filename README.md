@@ -33,6 +33,7 @@ Teehee supports multiple selections, efficient selection modifying commands and 
     * `l`: to line end
     * `k`: to file start
     * `j`: to file end
+    * `<count>g` jumps to offset, `<count>G` extends to offset
 * `;` to collapse selections to cursors
 * `<a-;>` (alt and ;) to swap cursor and selection end
 * `<a-s>` (alt and s) to split selection to multiple selections of size...
@@ -42,7 +43,6 @@ Teehee supports multiple selections, efficient selection modifying commands and 
     * `q`: 8 bytes (Qword)
     * `o`: 16 bytes (Oword)
     * `n`: delimited by null bytes
-    * `<count>`: any number of the above
     * `/`: matching a text pattern (`?` for hex pattern)
 * `d` to delete selected data from buffer
 * `i` to enter insert mode at the beginning of selections (`I` to insert hex instead of ascii)
@@ -66,3 +66,19 @@ Entering a pattern:
 * `<esc>` to go back to normal mode
 * `<enter>` to accept pattern
 * arrow keys, `<backspace>` and `<delete>` also supported
+
+Counts:
+* The following commands maybe prefixed by a count:
+    * Movement (`hjkl` and `HJKL`)
+    * Selection modification (`()<space><a-space>`)
+    * Jump to offset (`g` and `G`)
+    * Paste (`p`)
+    * (In split mode) `bwdqon`
+* Counts are inputted by typing digits 0-9 (in hex mode, 0-f).
+* `x` switches between hex and decimal mode.
+* Note that `a-f` may shadow some keys, so switch out of hex mode before running
+a command.
+* Example: `y5p`: yank the selection and paste it 5 times.
+* Example: `50l`: Move 50 bytes to the right.
+* Example: `x500g`: Jump to offset 0x500
+* Example: `<a-s>x12xb`: Split selection into parts of 0x12 bytes.
