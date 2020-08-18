@@ -306,6 +306,14 @@ impl SelRegion {
         SelRegion::new(caret_location, self.tail)
     }
 
+    pub fn jump_to(&self, offset: usize) -> SelRegion {
+        SelRegion::new(offset, offset)
+    }
+
+    pub fn extend_to(&self, offset: usize) -> SelRegion {
+        SelRegion::new(offset, self.tail)
+    }
+
     pub fn jump_to_boundary(
         &self,
         direction: Direction,

@@ -109,12 +109,28 @@ impl Mode for Normal {
         } else if let Some(action) = DEFAULT_MAPS.event_to_action(event) {
             Some(match action {
                 Action::Quit => ModeTransition::new_mode(modes::quitting::Quitting()),
-                Action::JumpToMode => {
-                    ModeTransition::new_mode(modes::jumpto::JumpTo { extend: false })
-                }
-                Action::ExtendToMode => {
-                    ModeTransition::new_mode(modes::jumpto::JumpTo { extend: true })
-                }
+                Action::JumpToMode => match self.count_state {
+                    cmd_count::State::None => {
+                        ModeTransition::new_mode(modes::jumpto::JumpTo { extend: false })
+                    }
+                    cmd_count::State::Some { count: offset, .. } => {
+                        ModeTransition::new_mode_and_dirty(
+                            Normal::new(),
+                            buffer.map_selections(|region| vec![region.jump_to(offset)]),
+                        )
+                    }
+                },
+                Action::ExtendToMode => match self.count_state {
+                    cmd_count::State::None => {
+                        ModeTransition::new_mode(modes::jumpto::JumpTo { extend: true })
+                    }
+                    cmd_count::State::Some { count: offset, .. } => {
+                        ModeTransition::new_mode_and_dirty(
+                            Normal::new(),
+                            buffer.map_selections(|region| vec![region.extend_to(offset)]),
+                        )
+                    }
+                },
                 Action::SplitMode => ModeTransition::new_mode(modes::split::Split::new()),
                 Action::Insert { hex } => ModeTransition::new_mode_and_dirty(
                     modes::insert::Insert {
