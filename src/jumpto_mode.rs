@@ -49,7 +49,7 @@ impl Mode for JumpTo {
         if let Some(direction) = DEFAULT_MAPS.event_to_action(evt) {
             let max_bytes = buffer.data.len();
             Some(ModeTransition::new_mode_and_dirty(
-                Normal(),
+                Normal::new(),
                 if self.extend {
                     buffer.map_selections(|region| {
                         vec![region.extend_to_boundary(direction, bytes_per_line, max_bytes)]
@@ -61,7 +61,7 @@ impl Mode for JumpTo {
                 },
             ))
         } else if let Event::Key(_) = evt {
-            Some(ModeTransition::new_mode(Normal()))
+            Some(ModeTransition::new_mode(Normal::new()))
         } else {
             None
         }

@@ -341,7 +341,7 @@ impl HexView {
 
             last_draw_time: Default::default(),
 
-            mode: Box::new(modes::normal::Normal()),
+            mode: Box::new(modes::normal::Normal::new()),
             info: None,
         }
     }

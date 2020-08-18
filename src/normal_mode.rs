@@ -5,6 +5,7 @@ use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use lazy_static::lazy_static;
 
 use super::buffer::*;
+use super::cmd_count;
 use super::keymap::*;
 use super::mode::*;
 use super::modes;
@@ -12,7 +13,9 @@ use super::operations as ops;
 use super::selection::Direction;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub struct Normal();
+pub struct Normal {
+    count_state: cmd_count::State,
+}
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 enum Action {
@@ -90,7 +93,7 @@ lazy_static! {
 
 impl Mode for Normal {
     fn name(&self) -> Cow<'static, str> {
-        "NORMAL".into()
+        format!("NORMAL{}", self.count_state).into()
     }
 
     fn transition(
@@ -99,7 +102,11 @@ impl Mode for Normal {
         buffer: &mut Buffer,
         bytes_per_line: usize,
     ) -> Option<ModeTransition> {
-        if let Some(action) = DEFAULT_MAPS.event_to_action(event) {
+        if let cmd_count::Transition::Update(new_state) = self.count_state.transition(event) {
+            Some(ModeTransition::new_mode(Normal {
+                count_state: new_state,
+            }))
+        } else if let Some(action) = DEFAULT_MAPS.event_to_action(event) {
             Some(match action {
                 Action::Quit => ModeTransition::new_mode(modes::quitting::Quitting()),
                 Action::JumpToMode => {
@@ -108,7 +115,7 @@ impl Mode for Normal {
                 Action::ExtendToMode => {
                     ModeTransition::new_mode(modes::jumpto::JumpTo { extend: true })
                 }
-                Action::SplitMode => ModeTransition::new_mode(modes::split::Split { count: None }),
+                Action::SplitMode => ModeTransition::new_mode(modes::split::Split::new()),
                 Action::Insert { hex } => ModeTransition::new_mode_and_dirty(
                     modes::insert::Insert {
                         hex,
@@ -213,8 +220,12 @@ impl Mode for Normal {
                     modes::search::Search::new(modes::collapse::Collapse(), hex),
                 ),
                 Action::Measure => ModeTransition::new_mode_and_info(
-                    Normal(),
-                    format!("{} = 0x{:x} bytes", buffer.selection.main().len(), buffer.selection.main().len()),
+                    Normal::new(),
+                    format!(
+                        "{} = 0x{:x} bytes",
+                        buffer.selection.main().len(),
+                        buffer.selection.main().len()
+                    ),
                 ),
             })
         } else {
@@ -223,5 +234,13 @@ impl Mode for Normal {
     }
     fn as_any(&self) -> &dyn std::any::Any {
         self
+    }
+}
+
+impl Normal {
+    pub fn new() -> Normal {
+        Normal {
+            count_state: cmd_count::State::None,
+        }
     }
 }

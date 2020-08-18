@@ -7,6 +7,8 @@ mod mode;
 mod operations;
 mod selection;
 
+mod cmd_count;
+
 mod collapse_mode;
 mod insert_mode;
 mod jumpto_mode;

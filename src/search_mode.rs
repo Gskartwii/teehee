@@ -217,7 +217,7 @@ impl Mode for Search {
                 Action::SwitchInputMode => {
                     hex = !hex;
                 }
-                Action::Cancel => return Some(ModeTransition::new_mode(Normal())),
+                Action::Cancel => return Some(ModeTransition::new_mode(Normal::new())),
                 Action::Finish => {
                     return Some(self.next.borrow().as_ref().unwrap().apply_search(
                         pattern,

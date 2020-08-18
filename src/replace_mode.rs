@@ -53,7 +53,7 @@ impl Mode for Replace {
                     Action::Null => {
                         let delta = ops::replace(&buffer.data, &buffer.selection, 0);
                         Some(ModeTransition::new_mode_and_dirty(
-                            Normal(),
+                            Normal::new(),
                             buffer.apply_delta(&delta),
                         ))
                     }
@@ -61,18 +61,18 @@ impl Mode for Replace {
             }
 
             if !(*modifiers & !KeyModifiers::SHIFT).is_empty() {
-                return Some(ModeTransition::new_mode(Normal()));
+                return Some(ModeTransition::new_mode(Normal::new()));
             }
 
             if !self.hex {
                 let delta = ops::replace(&buffer.data, &buffer.selection, *ch as u8); // lossy!
                 Some(ModeTransition::new_mode_and_dirty(
-                    Normal(),
+                    Normal::new(),
                     buffer.apply_delta(&delta),
                 ))
             } else if self.hex_half.is_none() {
                 if !ch.is_ascii_hexdigit() {
-                    return Some(ModeTransition::new_mode(Normal()));
+                    return Some(ModeTransition::new_mode(Normal::new()));
                 }
 
                 let replacing_ch = (ch.to_digit(16).unwrap() as u8) << 4;
@@ -82,18 +82,18 @@ impl Mode for Replace {
                 }))
             } else {
                 if !ch.is_ascii_hexdigit() {
-                    return Some(ModeTransition::new_mode(Normal()));
+                    return Some(ModeTransition::new_mode(Normal::new()));
                 }
 
                 let replacing_ch = (ch.to_digit(16).unwrap() as u8) | self.hex_half.unwrap();
                 let delta = ops::replace(&buffer.data, &buffer.selection, replacing_ch); // lossy!
                 Some(ModeTransition::new_mode_and_dirty(
-                    Normal(),
+                    Normal::new(),
                     buffer.apply_delta(&delta),
                 ))
             }
         } else if let Event::Key(_) = evt {
-            Some(ModeTransition::new_mode(Normal()))
+            Some(ModeTransition::new_mode(Normal::new()))
         } else {
             None
         }

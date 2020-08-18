@@ -13,7 +13,7 @@ pub struct Collapse();
 impl SearchAcceptor for Collapse {
     fn apply_search(&self, pattern: Pattern, buffer: &mut Buffer, _: usize) -> ModeTransition {
         if pattern.pieces.is_empty() {
-            return ModeTransition::new_mode(Normal());
+            return ModeTransition::new_mode(Normal::new());
         }
         let matched_ranges = pattern.map_selections_to_matches(&buffer);
         let matched_len: usize = matched_ranges
@@ -24,12 +24,12 @@ impl SearchAcceptor for Collapse {
         if matched_len == 0 {
             // Nothing selected was matched: refuse to split because it would yield
             // an empty selection (invalid)
-            return ModeTransition::new_mode(Normal());
+            return ModeTransition::new_mode(Normal::new());
         }
 
         let mut remaining_matched_ranges = &matched_ranges[..];
         ModeTransition::new_mode_and_dirty(
-            Normal(),
+            Normal::new(),
             buffer.map_selections(|base_region| {
                 let (this, next) = remaining_matched_ranges.split_first().unwrap();
                 remaining_matched_ranges = next;

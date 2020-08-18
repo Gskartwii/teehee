@@ -115,7 +115,7 @@ impl Mode for Insert {
                 *self
             };
             Some(match action {
-                Action::Exit => ModeTransition::new_mode(Normal()),
+                Action::Exit => ModeTransition::new_mode(Normal::new()),
                 Action::InsertNull => {
                     let inserted_bytes = vec![0];
                     let delta = ops::insert(&buffer.data, &buffer.selection, inserted_bytes);
