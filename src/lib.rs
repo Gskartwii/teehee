@@ -10,6 +10,7 @@ mod selection;
 mod cmd_count;
 
 mod collapse_mode;
+mod command_mode;
 mod insert_mode;
 mod jumpto_mode;
 mod normal_mode;
@@ -44,6 +45,7 @@ mod modes {
     }
 
     pub(crate) use super::collapse_mode as collapse;
+    pub(crate) use super::command_mode as command;
     pub(crate) use super::insert_mode as insert;
     pub(crate) use super::jumpto_mode as jumpto;
     pub(crate) use super::normal_mode as normal;

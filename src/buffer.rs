@@ -1,6 +1,7 @@
 use xi_rope::Interval;
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 use super::byte_rope::*;
 use super::mode::*;
@@ -14,17 +15,21 @@ pub enum OverflowSelectionStyle {
 }
 
 pub struct Buffer {
+    pub path: Option<PathBuf>,
     pub data: Rope,
     pub selection: Selection,
     pub registers: HashMap<char, Vec<Vec<u8>>>,
+    pub dirty: bool,
 }
 
 impl Buffer {
-    pub fn from_data(data: Vec<u8>) -> Buffer {
+    pub fn from_data_and_path(data: Vec<u8>, path: Option<impl Into<PathBuf>>) -> Buffer {
         Buffer {
             data: data.into(),
             selection: Selection::new(),
             registers: HashMap::new(),
+            dirty: false,
+            path: path.map(Into::into),
         }
     }
 
@@ -59,6 +64,7 @@ impl Buffer {
     pub fn apply_delta(&mut self, delta: &RopeDelta) -> DirtyBytes {
         self.selection.apply_delta(&delta, self.data.len());
         self.data = self.data.apply_delta(&delta);
+        self.dirty = true;
 
         DirtyBytes::ChangeLength
     }
@@ -72,6 +78,7 @@ impl Buffer {
         self.selection
             .apply_delta_offset_carets(delta, caret_offset, tail_offset, self.data.len());
         self.data = self.data.apply_delta(&delta);
+        self.dirty = true;
 
         DirtyBytes::ChangeLength
     }

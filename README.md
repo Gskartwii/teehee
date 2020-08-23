@@ -59,6 +59,11 @@ Teehee supports multiple selections, efficient selection modifying commands and 
 * `p` to paste register `"` contents from `y`/`d`/`c`
 * `s` to collapse selections to those matching a text pattern (`S` for hex pattern)
 * `M` to measure length of current main selection (in bytes)
+* `:` to enter command mode
+	* `:q` to quit
+	* `:q!` to force quit (even if buffer dirty)
+	* `:w` to flush buffer to disk (currently doesn't support filename input)
+	* `:wq` to fluh buffer, then quit
 
 Entering a pattern:
 

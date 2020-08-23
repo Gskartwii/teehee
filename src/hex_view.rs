@@ -18,6 +18,7 @@ use super::buffer::*;
 use super::mode::*;
 use super::modes;
 use std::io::Write;
+use std::path::PathBuf;
 
 const VERTICAL: &str = "│";
 const LEFTARROW: &str = "";
@@ -316,6 +317,61 @@ impl StatusLinePrompter for modes::search::Search {
     }
 }
 
+impl StatusLinePrompter for modes::command::Command {
+    fn render_with_size(
+        &self,
+        stdout: &mut dyn Write,
+        mut max_width: usize,
+        last_start_col: usize,
+    ) -> Result<usize> {
+        let mut start_column = last_start_col;
+        queue!(
+            stdout,
+            style::PrintStyledContent(
+                style::style(":")
+                    .with(style::Color::White)
+                    .on(style::Color::Blue),
+            )
+        )?;
+        max_width -= 1;
+
+        // Make sure start_column is between self.cursor and the length of the pattern
+        if self.command.len() <= start_column {
+            start_column = std::cmp::max(1, self.command.len()) - 1;
+        } else if self.cursor < start_column {
+            start_column = self.cursor;
+        }
+
+        max_width -= (self.cursor == self.command.len()) as usize;
+
+        let required_length = self.cursor - start_column;
+        if required_length > max_width {
+            start_column += required_length - max_width;
+        }
+
+        queue!(
+            stdout,
+            style::Print(
+                &self.command
+                    [start_column..std::cmp::min(self.command.len(), start_column + max_width)]
+            )
+        )?;
+
+        if self.cursor == self.command.len() {
+            queue!(
+                stdout,
+                style::PrintStyledContent(
+                    style::style(" ")
+                        .with(style::Color::Black)
+                        .on(style::Color::White)
+                ),
+            )?;
+        }
+
+        Ok(start_column)
+    }
+}
+
 pub struct HexView {
     buffer: Buffer,
     size: (u16, u16),
@@ -330,9 +386,9 @@ pub struct HexView {
 }
 
 impl HexView {
-    pub fn from_data(data: Vec<u8>) -> HexView {
+    pub fn from_data_and_path(data: Vec<u8>, path: Option<impl Into<PathBuf>>) -> HexView {
         HexView {
-            buffer: Buffer::from_data(data),
+            buffer: Buffer::from_data_and_path(data, path),
             bytes_per_line: 0x10,
             start_offset: 0,
             size: terminal::size().unwrap(),
@@ -709,8 +765,18 @@ impl HexView {
         }
 
         self.draw_statusline_here(stdout)?;
-        if let Some(statusliner) = self.mode.as_any().downcast_ref::<modes::search::Search>() {
-            queue!(stdout, cursor::MoveTo(0, self.size.1),)?;
+
+        let any_mode = self.mode.as_any();
+        let prompter = if let Some(statusliner) = any_mode.downcast_ref::<modes::search::Search>() {
+            Some(statusliner as &dyn StatusLinePrompter)
+        } else if let Some(statusliner) = any_mode.downcast_ref::<modes::command::Command>() {
+            Some(statusliner as &dyn StatusLinePrompter)
+        } else {
+            None
+        };
+
+        if let Some(statusliner) = prompter {
+            queue!(stdout, cursor::MoveTo(0, self.size.1))?;
             let prev_col = self.last_visible_prompt_col.get();
             let new_col = statusliner.render_with_size(stdout, self.size.0 as usize, prev_col)?;
             self.last_visible_prompt_col.set(new_col);

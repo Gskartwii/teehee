@@ -19,13 +19,13 @@ pub struct Normal {
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 enum Action {
-    Quit,
     Move(Direction),
     Extend(Direction),
     SplitMode,
     JumpToMode,
     ExtendToMode,
     CollapseMode { hex: bool },
+    CommandMode,
     SwapCaret,
     CollapseSelection,
     Delete { register: char },
@@ -46,7 +46,6 @@ enum Action {
 fn default_maps() -> KeyMap<Action> {
     KeyMap {
         maps: keys!(
-            (key KeyCode::Esc => Action::Quit),
             ('h' => Action::Move(Direction::Left)),
             ('j' => Action::Move(Direction::Down)),
             ('k' => Action::Move(Direction::Up)),
@@ -58,6 +57,7 @@ fn default_maps() -> KeyMap<Action> {
             ('g' => Action::JumpToMode),
             ('G' => Action::ExtendToMode),
             (alt 's' => Action::SplitMode),
+            (':' => Action::CommandMode),
             (';' => Action::CollapseSelection),
             (alt ';' => Action::SwapCaret),
             ('%' => Action::SelectAll),
@@ -108,7 +108,6 @@ impl Mode for Normal {
             }))
         } else if let Some(action) = DEFAULT_MAPS.event_to_action(event) {
             Some(match action {
-                Action::Quit => ModeTransition::new_mode(modes::quitting::Quitting()),
                 Action::JumpToMode => match self.count_state {
                     cmd_count::State::None => {
                         ModeTransition::new_mode(modes::jumpto::JumpTo { extend: false })
@@ -291,6 +290,7 @@ impl Mode for Normal {
                         buffer.selection.main().len()
                     ),
                 ),
+                Action::CommandMode => ModeTransition::new_mode(modes::command::Command::new()),
             })
         } else {
             None

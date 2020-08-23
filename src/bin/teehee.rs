@@ -8,9 +8,10 @@ fn main() {
     let mut stdout = BufWriter::with_capacity(STDOUT_BUF, stdout.lock());
     let filename = std::env::args().nth(1);
     let contents = filename
+        .as_ref()
         .map(|filename| std::fs::read(&filename).expect("Couldn't read file"))
         .unwrap_or(vec![]);
-    let view = HexView::from_data(contents);
+    let view = HexView::from_data_and_path(contents, filename);
 
     view.run_event_loop(&mut stdout).unwrap();
 }
