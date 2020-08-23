@@ -481,13 +481,13 @@ impl HexView {
             bytes.iter().copied().zip(mark_commands.iter().cloned()),
         )?;
 
-        let mut padding_length = (self.bytes_per_line - bytes.len()) % self.bytes_per_line * 3;
+        let mut padding_length = if bytes.len() == 0 {
+            self.bytes_per_line * 3
+        } else {
+            (self.bytes_per_line - bytes.len()) % self.bytes_per_line * 3
+        };
         if let Some(style_cmd) = &end_style {
-            if padding_length > 0 {
-                padding_length -= 2;
-            } else {
-                padding_length = self.bytes_per_line * 3 - 2;
-            }
+            padding_length -= 2;
 
             if let Some(start_cmd) = style_cmd.start_style() {
                 queue_style(stdout, start_cmd)?;
