@@ -103,7 +103,8 @@ impl Mode for Insert {
     fn has_half_cursor(&self) -> bool {
         self.hex_half.is_some()
     }
-    fn transition(&self, evt: &Event, buffer: &mut Buffer, _: usize) -> Option<ModeTransition> {
+    fn transition(&self, evt: &Event, buffers: &mut Buffers, _: usize) -> Option<ModeTransition> {
+        let buffer = buffers.current_mut();
         if let Some(action) = DEFAULT_MAPS.event_to_action(evt) {
             let new_state = if self.hex_half.is_some() {
                 Insert {

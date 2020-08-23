@@ -99,9 +99,10 @@ impl Mode for Normal {
     fn transition(
         &self,
         event: &Event,
-        buffer: &mut Buffer,
+        buffers: &mut Buffers,
         bytes_per_line: usize,
     ) -> Option<ModeTransition> {
+        let buffer = buffers.current_mut();
         if let cmd_count::Transition::Update(new_state) = self.count_state.transition(event) {
             Some(ModeTransition::new_mode(Normal {
                 count_state: new_state,

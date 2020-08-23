@@ -1,4 +1,4 @@
-use super::buffer::Buffer;
+use super::buffer::Buffers;
 use super::mode::{Mode, ModeTransition};
 use super::modes::normal::Normal;
 use super::modes::search::{Pattern, SearchAcceptor};
@@ -11,7 +11,8 @@ use crossterm::event::Event;
 pub struct Collapse();
 
 impl SearchAcceptor for Collapse {
-    fn apply_search(&self, pattern: Pattern, buffer: &mut Buffer, _: usize) -> ModeTransition {
+    fn apply_search(&self, pattern: Pattern, buffers: &mut Buffers, _: usize) -> ModeTransition {
+        let buffer = buffers.current_mut();
         if pattern.pieces.is_empty() {
             return ModeTransition::new_mode(Normal::new());
         }
@@ -46,7 +47,7 @@ impl Mode for Collapse {
     fn name(&self) -> Cow<'static, str> {
         "COLLAPSE".into()
     }
-    fn transition(&self, _: &Event, _: &mut Buffer, _: usize) -> Option<ModeTransition> {
+    fn transition(&self, _: &Event, _: &mut Buffers, _: usize) -> Option<ModeTransition> {
         None
     }
     fn as_any(&self) -> &dyn std::any::Any {

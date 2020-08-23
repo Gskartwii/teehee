@@ -131,7 +131,8 @@ impl Mode for Command {
         "COMMAND".into()
     }
 
-    fn transition(&self, evt: &Event, buffer: &mut Buffer, _: usize) -> Option<ModeTransition> {
+    fn transition(&self, evt: &Event, buffers: &mut Buffers, _: usize) -> Option<ModeTransition> {
+        let buffer = buffers.current_mut();
         if let Some(action) = DEFAULT_MAPS.event_to_action(evt) {
             let mut cursor = self.cursor;
             let mut command = self.command.to_owned();

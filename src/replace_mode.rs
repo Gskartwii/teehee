@@ -42,7 +42,8 @@ impl Mode for Replace {
         }
     }
 
-    fn transition(&self, evt: &Event, buffer: &mut Buffer, _: usize) -> Option<ModeTransition> {
+    fn transition(&self, evt: &Event, buffers: &mut Buffers, _: usize) -> Option<ModeTransition> {
+        let buffer = buffers.current_mut();
         if let Event::Key(KeyEvent {
             code: KeyCode::Char(ch),
             modifiers,

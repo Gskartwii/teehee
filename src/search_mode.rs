@@ -110,7 +110,7 @@ pub trait SearchAcceptor: Mode {
     fn apply_search(
         &self,
         pattern: Pattern,
-        buffer: &mut Buffer,
+        buffers: &mut Buffers,
         bytes_per_line: usize,
     ) -> ModeTransition;
 }
@@ -182,7 +182,7 @@ impl Mode for Search {
     fn transition(
         &self,
         evt: &Event,
-        buffer: &mut Buffer,
+        buffers: &mut Buffers,
         bytes_per_line: usize,
     ) -> Option<ModeTransition> {
         if let Some(action) = DEFAULT_MAPS.event_to_action(evt) {
@@ -221,7 +221,7 @@ impl Mode for Search {
                 Action::Finish => {
                     return Some(self.next.borrow().as_ref().unwrap().apply_search(
                         pattern,
-                        buffer,
+                        buffers,
                         bytes_per_line,
                     ))
                 }

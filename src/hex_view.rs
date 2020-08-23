@@ -18,7 +18,6 @@ use super::buffer::*;
 use super::mode::*;
 use super::modes;
 use std::io::Write;
-use std::path::PathBuf;
 
 const VERTICAL: &str = "│";
 const LEFTARROW: &str = "";
@@ -373,7 +372,7 @@ impl StatusLinePrompter for modes::command::Command {
 }
 
 pub struct HexView {
-    buffer: Buffer,
+    buffers: Buffers,
     size: (u16, u16),
     bytes_per_line: usize,
     start_offset: usize,
@@ -386,9 +385,9 @@ pub struct HexView {
 }
 
 impl HexView {
-    pub fn from_data_and_path(data: Vec<u8>, path: Option<impl Into<PathBuf>>) -> HexView {
+    pub fn with_buffers(buffers: Buffers) -> HexView {
         HexView {
-            buffer: Buffer::from_data_and_path(data, path),
+            buffers,
             bytes_per_line: 0x10,
             start_offset: 0,
             size: terminal::size().unwrap(),
@@ -526,7 +525,7 @@ impl HexView {
     fn visible_bytes(&self) -> Range<usize> {
         self.start_offset
             ..cmp::min(
-                self.buffer.data.len() + 1,
+                self.buffers.current().data.len() + 1,
                 self.start_offset + (self.size.1 - 1) as usize * self.bytes_per_line,
             )
     }
@@ -581,7 +580,8 @@ impl HexView {
     fn mark_commands(&self, visible: Range<usize>) -> Vec<StylingCommand> {
         let mut mark_commands = vec![StylingCommand::default(); visible.len()];
         let mut selected_regions = self
-            .buffer
+            .buffers
+            .current()
             .selection
             .regions_in_range(visible.start, visible.end);
         let mut command_stack = vec![self.default_style()];
@@ -664,22 +664,23 @@ impl HexView {
     }
 
     fn calculate_powerline_length(&self) -> usize {
+        let buf = self.buffers.current();
         let mut length = 0;
         length += 1; // leftarrow
         length += 2 + self.mode.name().len();
         length += 1; // leftarrow
         length += format!(
             " {} sels ({}) ",
-            self.buffer.selection.len(),
-            self.buffer.selection.main_selection + 1
+            buf.selection.len(),
+            buf.selection.main_selection + 1
         )
         .len();
         length += 1; // leftarrow
-        if !self.buffer.data.is_empty() {
+        if !buf.data.is_empty() {
             length += format!(
                 " {:x}/{:x} ",
-                self.buffer.selection.main_cursor_offset(),
-                self.buffer.data.len() - 1
+                buf.selection.main_cursor_offset(),
+                buf.data.len() - 1
             )
             .len();
         } else {
@@ -689,6 +690,7 @@ impl HexView {
     }
 
     fn draw_statusline_here(&self, stdout: &mut impl Write) -> Result<()> {
+        let buf = self.buffers.current();
         queue!(
             stdout,
             style::PrintStyledContent(style::style(LEFTARROW).with(Color::DarkYellow)),
@@ -705,14 +707,14 @@ impl HexView {
             style::PrintStyledContent(
                 style::style(format!(
                     " {} sels ({}) ",
-                    self.buffer.selection.len(),
-                    self.buffer.selection.main_selection + 1
+                    buf.selection.len(),
+                    buf.selection.main_selection + 1
                 ))
                 .with(Color::AnsiValue(16))
                 .on(Color::White)
             ),
         )?;
-        if !self.buffer.data.is_empty() {
+        if !buf.data.is_empty() {
             queue!(
                 stdout,
                 style::PrintStyledContent(
@@ -721,8 +723,8 @@ impl HexView {
                 style::PrintStyledContent(
                     style::style(format!(
                         " {:x}/{:x} ",
-                        self.buffer.selection.main_cursor_offset(),
-                        self.buffer.data.len() - 1,
+                        buf.selection.main_cursor_offset(),
+                        buf.data.len() - 1,
                     ))
                     .with(Color::White)
                     .on(Color::Blue),
@@ -786,7 +788,7 @@ impl HexView {
     }
 
     fn overflow_cursor_style(&self) -> Option<StylingCommand> {
-        self.buffer.overflow_sel_style().map(|style| {
+        self.buffers.current().overflow_sel_style().map(|style| {
             match style {
                 OverflowSelectionStyle::CursorTail | OverflowSelectionStyle::Cursor
                     if self.mode.has_half_cursor() =>
@@ -807,7 +809,11 @@ impl HexView {
         let start_index = visible_bytes.start;
         let end_index = visible_bytes.end;
 
-        let visible_bytes_cow = self.buffer.data.slice_to_cow(start_index..end_index);
+        let visible_bytes_cow = self
+            .buffers
+            .current()
+            .data
+            .slice_to_cow(start_index..end_index);
 
         let max_bytes = visible_bytes_cow.len();
         let mark_commands = self.mark_commands(visible_bytes.clone());
@@ -824,7 +830,7 @@ impl HexView {
                 &visible_bytes_cow[normalized_i..normalized_end],
                 i,
                 &mark_commands[normalized_i..normalized_end],
-                if i + self.bytes_per_line > self.buffer.data.len() {
+                if i + self.bytes_per_line > self.buffers.current().data.len() {
                     self.overflow_cursor_style()
                 } else {
                     None
@@ -843,7 +849,11 @@ impl HexView {
         let visible_bytes = self.visible_bytes();
         let start_index = visible_bytes.start;
         let end_index = visible_bytes.end;
-        let visible_bytes_cow = self.buffer.data.slice_to_cow(start_index..end_index);
+        let visible_bytes_cow = self
+            .buffers
+            .current()
+            .data
+            .slice_to_cow(start_index..end_index);
 
         let max_bytes = visible_bytes_cow.len();
         let mark_commands = self.mark_commands(visible_bytes.clone());
@@ -856,7 +866,7 @@ impl HexView {
                 &visible_bytes_cow[normalized_i..normalized_end],
                 i,
                 &mark_commands[normalized_i..normalized_end],
-                if i + self.bytes_per_line > self.buffer.data.len() {
+                if i + self.bytes_per_line > self.buffers.current().data.len() {
                     self.overflow_cursor_style()
                 } else {
                     None
@@ -927,12 +937,12 @@ impl HexView {
     }
 
     fn maybe_update_offset(&mut self, stdout: &mut impl Write) -> Result<()> {
-        if self.buffer.data.is_empty() {
+        if self.buffers.current().data.is_empty() {
             self.start_offset = 0;
             return Ok(());
         }
 
-        let main_cursor_offset = self.buffer.selection.main_cursor_offset();
+        let main_cursor_offset = self.buffers.current().selection.main_cursor_offset();
         let visible_bytes = self.visible_bytes();
         let delta = if main_cursor_offset < visible_bytes.start {
             main_cursor_offset as isize - visible_bytes.start as isize
@@ -953,7 +963,7 @@ impl HexView {
     }
 
     fn maybe_update_offset_and_draw(&mut self, stdout: &mut impl Write) -> Result<()> {
-        let main_cursor_offset = self.buffer.selection.main_cursor_offset();
+        let main_cursor_offset = self.buffers.current().selection.main_cursor_offset();
         let visible_bytes = self.visible_bytes();
         if main_cursor_offset < visible_bytes.start {
             self.start_offset = main_cursor_offset - main_cursor_offset % self.bytes_per_line;
@@ -1034,7 +1044,7 @@ impl HexView {
             let evt = event::read()?;
             let transition = self
                 .mode
-                .transition(&evt, &mut self.buffer, self.bytes_per_line);
+                .transition(&evt, &mut self.buffers, self.bytes_per_line);
             if let Some(transition) = transition {
                 self.transition(stdout, transition)?;
             } else {

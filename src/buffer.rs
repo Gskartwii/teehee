@@ -14,6 +14,7 @@ pub enum OverflowSelectionStyle {
     CursorTail,
 }
 
+#[derive(Default)]
 pub struct Buffer {
     pub path: Option<PathBuf>,
     pub data: Rope,
@@ -138,5 +139,30 @@ impl Buffer {
         } else {
             None
         }
+    }
+}
+
+pub struct Buffers {
+    list: Vec<Buffer>,
+    cur_buf_index: usize,
+}
+
+impl Buffers {
+    pub fn new() -> Buffers {
+        Buffers::with_buffer(Buffer::default())
+    }
+
+    pub fn with_buffer(buf: Buffer) -> Buffers {
+        Buffers {
+            cur_buf_index: 0,
+            list: vec![buf],
+        }
+    }
+
+    pub fn current(&self) -> &Buffer {
+        &self.list[self.cur_buf_index]
+    }
+    pub fn current_mut(&mut self) -> &mut Buffer {
+        &mut self.list[self.cur_buf_index]
     }
 }

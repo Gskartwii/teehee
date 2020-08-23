@@ -45,7 +45,8 @@ lazy_static! {
 }
 
 impl SearchAcceptor for Split {
-    fn apply_search(&self, pattern: Pattern, buffer: &mut Buffer, _: usize) -> ModeTransition {
+    fn apply_search(&self, pattern: Pattern, buffers: &mut Buffers, _: usize) -> ModeTransition {
+        let buffer = buffers.current_mut();
         if pattern.pieces.is_empty() {
             return ModeTransition::new_mode(Normal::new());
         }
@@ -102,9 +103,10 @@ impl Mode for Split {
     fn transition(
         &self,
         evt: &Event,
-        buffer: &mut Buffer,
+        buffers: &mut Buffers,
         bytes_per_line: usize,
     ) -> Option<ModeTransition> {
+        let buffer = buffers.current_mut();
         if let cmd_count::Transition::Update(new_state) = self.count_state.transition(evt) {
             Some(ModeTransition::new_mode(Split {
                 count_state: new_state,
@@ -130,7 +132,7 @@ impl Mode for Split {
                             .take(count)
                             .collect(),
                     },
-                    buffer,
+                    buffers,
                     bytes_per_line,
                 ),
                 Action::Search { hex } => ModeTransition::new_mode(Search::new(*self, hex)),

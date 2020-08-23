@@ -33,7 +33,7 @@ mod modes {
             fn transition(
                 &self,
                 _: &crossterm::event::Event,
-                _: &mut crate::buffer::Buffer,
+                _: &mut crate::buffer::Buffers,
                 _: usize,
             ) -> Option<crate::mode::ModeTransition> {
                 unreachable!();
@@ -53,3 +53,5 @@ mod modes {
     pub(crate) use super::search_mode as search;
     pub(crate) use super::split_mode as split;
 }
+
+pub use buffer::{Buffer, Buffers};

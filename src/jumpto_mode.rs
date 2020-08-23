@@ -43,9 +43,10 @@ impl Mode for JumpTo {
     fn transition(
         &self,
         evt: &Event,
-        buffer: &mut Buffer,
+        buffers: &mut Buffers,
         bytes_per_line: usize,
     ) -> Option<ModeTransition> {
+        let buffer = buffers.current_mut();
         if let Some(direction) = DEFAULT_MAPS.event_to_action(evt) {
             let max_bytes = buffer.data.len();
             Some(ModeTransition::new_mode_and_dirty(

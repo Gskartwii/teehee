@@ -10,7 +10,7 @@ const MAX_LEAF: usize = 1024;
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash, Default)]
 pub struct Bytes(pub Vec<u8>);
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Rope(Node<RopeInfo>);
 pub type RopeDelta = Delta<RopeInfo>;
 pub type RopeDeltaElement = DeltaElement<RopeInfo>;
