@@ -41,8 +41,8 @@ fn default_maps() -> KeyMap<Action> {
 mod cmd {
     use super::*;
 
-    pub fn quit(buf: &mut Buffer, _: &str) -> ModeTransition {
-        if buf.dirty {
+    pub fn quit(buf: &mut Buffers, _: &str) -> ModeTransition {
+        if buf.iter().any(|x| x.dirty && x.path.is_some()) {
             ModeTransition::new_mode_and_info(
                 Normal::new(),
                 "Unsaved changes! Run :wq or :q! instead.".into(),
@@ -52,42 +52,65 @@ mod cmd {
         }
     }
 
-    pub fn force_quit(_: &mut Buffer, _: &str) -> ModeTransition {
+    pub fn force_quit(_: &mut Buffers, _: &str) -> ModeTransition {
         ModeTransition::new_mode(quitting::Quitting {})
     }
 
-    pub fn write(buf: &mut Buffer, _: &str) -> ModeTransition {
-        if let Some(path) = buf.path.as_ref() {
-            if let Err(e) = fs::write(&path, buf.data.slice_to_cow(..)) {
+    pub fn write(buf: &mut Buffers, _: &str) -> ModeTransition {
+        if let Some(path) = buf.current().path.as_ref() {
+            if let Err(e) = fs::write(&path, buf.current().data.slice_to_cow(..)) {
                 return ModeTransition::new_mode_and_info(
                     Normal::new(),
                     format!("write failed: {}", e),
                 );
             }
-            buf.dirty = false;
+            buf.current_mut().dirty = false;
             ModeTransition::new_mode(Normal::new())
         } else {
             ModeTransition::new_mode_and_info(Normal::new(), "buffer has no path".into())
         }
     }
 
-    pub fn write_quit(buf: &mut Buffer, _: &str) -> ModeTransition {
-        if let Some(path) = buf.path.as_ref() {
-            if let Err(e) = fs::write(&path, buf.data.slice_to_cow(..)) {
-                return ModeTransition::new_mode_and_info(
-                    Normal::new(),
-                    format!("write failed: {}", e),
-                );
+    pub fn write_all(buffers: &mut Buffers, _: &str) -> ModeTransition {
+        for buf in buffers.iter_mut() {
+            if let Some(path) = buf.path.as_ref() {
+                if let Err(e) = fs::write(&path, buf.data.slice_to_cow(..)) {
+                    return ModeTransition::new_mode_and_info(
+                        Normal::new(),
+                        format!("write failed: {}", e),
+                    );
+                }
+                buf.dirty = false;
             }
-            buf.dirty = false;
-            ModeTransition::new_mode(quitting::Quitting {})
-        } else {
-            ModeTransition::new_mode_and_info(Normal::new(), "buffer has no path".into())
         }
+        ModeTransition::new_mode(Normal::new())
+    }
+
+    pub fn write_quit(buffers: &mut Buffers, _: &str) -> ModeTransition {
+        for buf in buffers.iter_mut() {
+            if let Some(path) = buf.path.as_ref() {
+                if let Err(e) = fs::write(&path, buf.data.slice_to_cow(..)) {
+                    return ModeTransition::new_mode_and_info(
+                        Normal::new(),
+                        format!("write failed: {}", e),
+                    );
+                }
+                buf.dirty = false;
+            }
+        }
+        ModeTransition::new_mode(quitting::Quitting {})
+    }
+
+    pub fn edit(buffers: &mut Buffers, filename: &str) -> ModeTransition {
+        let result = buffers.switch_buffer(filename);
+        if let Err(e) = result {
+            return ModeTransition::new_mode_and_info(Normal::new(), format!("{}", e));
+        }
+        ModeTransition::new_mode_and_dirty(Normal::new(), DirtyBytes::ChangeLength)
     }
 }
 
-type CommandHandler = fn(&mut Buffer, &str) -> ModeTransition;
+type CommandHandler = fn(&mut Buffers, &str) -> ModeTransition;
 
 fn default_commands() -> HashMap<String, CommandHandler> {
     hashmap![
@@ -98,6 +121,10 @@ fn default_commands() -> HashMap<String, CommandHandler> {
         "w".to_string() => cmd::write as CommandHandler,
         "write".to_string() => cmd::write as CommandHandler,
         "wq".to_string() => cmd::write_quit as CommandHandler,
+        "wa".to_string() => cmd::write_all as CommandHandler,
+        "write-all".to_string() => cmd::write_all as CommandHandler,
+        "e".to_string() => cmd::edit as CommandHandler,
+        "edit".to_string() => cmd::edit as CommandHandler,
     ]
 }
 
@@ -114,12 +141,12 @@ impl Command {
         }
     }
 
-    fn finish(&self, buffer: &mut Buffer) -> ModeTransition {
+    fn finish(&self, buffers: &mut Buffers) -> ModeTransition {
         let (name, rest) = self
             .command
             .split_at(self.command.find(' ').unwrap_or(self.command.len()));
         if let Some(handler) = DEFAULT_COMMANDS.get(name) {
-            handler(buffer, rest)
+            handler(buffers, if rest.len() == 0 { rest } else { &rest[1..] })
         } else {
             ModeTransition::new_mode_and_info(Normal::new(), format!("Unknown command {}", name))
         }
@@ -132,7 +159,6 @@ impl Mode for Command {
     }
 
     fn transition(&self, evt: &Event, buffers: &mut Buffers, _: usize) -> Option<ModeTransition> {
-        let buffer = buffers.current_mut();
         if let Some(action) = DEFAULT_MAPS.event_to_action(evt) {
             let mut cursor = self.cursor;
             let mut command = self.command.to_owned();
@@ -155,7 +181,7 @@ impl Mode for Command {
                 }
                 Action::CursorRight => {}
                 Action::Cancel => return Some(ModeTransition::new_mode(Normal::new())),
-                Action::Finish => return Some(self.finish(buffer)),
+                Action::Finish => return Some(self.finish(buffers)),
             }
             Some(ModeTransition::new_mode(Command { command, cursor }))
         } else if let Event::Key(KeyEvent {
@@ -163,7 +189,7 @@ impl Mode for Command {
             modifiers,
         }) = evt
         {
-            if !modifiers.is_empty() {
+            if !(*modifiers & !KeyModifiers::SHIFT).is_empty() {
                 return None;
             }
             let mut command = self.command.to_owned();

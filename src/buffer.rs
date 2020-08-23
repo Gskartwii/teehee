@@ -1,7 +1,7 @@
 use xi_rope::Interval;
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use super::byte_rope::*;
 use super::mode::*;
@@ -31,6 +31,14 @@ impl Buffer {
             registers: HashMap::new(),
             dirty: false,
             path: path.map(Into::into),
+        }
+    }
+
+    pub fn name(&self) -> String {
+        if let Some(path) = &self.path {
+            format!("{}", path.display())
+        } else {
+            "*scratch*".to_string()
         }
     }
 
@@ -164,5 +172,31 @@ impl Buffers {
     }
     pub fn current_mut(&mut self) -> &mut Buffer {
         &mut self.list[self.cur_buf_index]
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &Buffer> {
+        self.list.iter()
+    }
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Buffer> {
+        self.list.iter_mut()
+    }
+
+    pub fn switch_buffer(&mut self, filename: impl AsRef<Path>) -> Result<(), std::io::Error> {
+        let canon = filename.as_ref().canonicalize()?;
+        for (i, buf) in self.list.iter().enumerate() {
+            if let Some(path) = &buf.path {
+                if path.canonicalize()? == canon {
+                    self.cur_buf_index = i;
+                    return Ok(());
+                }
+            }
+        }
+
+        self.list.push(Buffer::from_data_and_path(
+            std::fs::read(&filename)?,
+            Some(filename.as_ref().to_owned()),
+        ));
+        self.cur_buf_index = self.list.len() - 1;
+        Ok(())
     }
 }

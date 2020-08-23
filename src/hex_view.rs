@@ -667,6 +667,11 @@ impl HexView {
         let buf = self.buffers.current();
         let mut length = 0;
         length += 1; // leftarrow
+        length += 2 + buf.name().len();
+        if buf.dirty {
+            length += 3;
+        }
+        length += 1; // leftarrow
         length += 2 + self.mode.name().len();
         length += 1; // leftarrow
         length += format!(
@@ -693,7 +698,25 @@ impl HexView {
         let buf = self.buffers.current();
         queue!(
             stdout,
-            style::PrintStyledContent(style::style(LEFTARROW).with(Color::DarkYellow)),
+            style::PrintStyledContent(style::style(LEFTARROW).with(Color::Red)),
+            style::PrintStyledContent(
+                style::style(format!(
+                    " {}{} ",
+                    self.buffers.current().name(),
+                    if self.buffers.current().dirty {
+                        "[+]"
+                    } else {
+                        ""
+                    }
+                ))
+                .with(Color::White)
+                .on(Color::Red)
+            ),
+            style::PrintStyledContent(
+                style::style(LEFTARROW)
+                    .with(Color::DarkYellow)
+                    .on(Color::Red)
+            ),
             style::PrintStyledContent(
                 style::style(format!(" {} ", self.mode.name()))
                     .with(Color::AnsiValue(16))
