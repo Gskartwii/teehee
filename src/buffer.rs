@@ -199,4 +199,12 @@ impl Buffers {
         self.cur_buf_index = self.list.len() - 1;
         Ok(())
     }
+
+    pub fn delete_current(&mut self) {
+        self.list.remove(self.cur_buf_index);
+        self.cur_buf_index = self.cur_buf_index.saturating_sub(1);
+        if self.list.is_empty() {
+            self.list.push(Buffer::default());
+        }
+    }
 }

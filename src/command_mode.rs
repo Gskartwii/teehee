@@ -45,7 +45,7 @@ mod cmd {
         if buf.iter().any(|x| x.dirty && x.path.is_some()) {
             ModeTransition::new_mode_and_info(
                 Normal::new(),
-                "Unsaved changes! Run :wq or :q! instead.".into(),
+                "unsaved changes! Run :wq or :q! instead.".into(),
             )
         } else {
             ModeTransition::new_mode(quitting::Quitting {})
@@ -108,6 +108,22 @@ mod cmd {
         }
         ModeTransition::new_mode_and_dirty(Normal::new(), DirtyBytes::ChangeLength)
     }
+
+    pub fn delete_buffer(buffers: &mut Buffers, _: &str) -> ModeTransition {
+        if buffers.current().dirty && buffers.current().path.is_some() {
+            return ModeTransition::new_mode_and_info(
+                Normal::new(),
+                "buffer is dirty, use :db! if you're sure".to_string(),
+            );
+        }
+        buffers.delete_current();
+        ModeTransition::new_mode_and_dirty(Normal::new(), DirtyBytes::ChangeLength)
+    }
+
+    pub fn force_delete_buffer(buffers: &mut Buffers, _: &str) -> ModeTransition {
+        buffers.delete_current();
+        ModeTransition::new_mode_and_dirty(Normal::new(), DirtyBytes::ChangeLength)
+    }
 }
 
 type CommandHandler = fn(&mut Buffers, &str) -> ModeTransition;
@@ -125,6 +141,10 @@ fn default_commands() -> HashMap<String, CommandHandler> {
         "write-all".to_string() => cmd::write_all as CommandHandler,
         "e".to_string() => cmd::edit as CommandHandler,
         "edit".to_string() => cmd::edit as CommandHandler,
+        "db".to_string() => cmd::delete_buffer as CommandHandler,
+        "delete-buffer".to_string() => cmd::delete_buffer as CommandHandler,
+        "db!".to_string() => cmd::force_delete_buffer as CommandHandler,
+        "delete-buffer!".to_string() => cmd::force_delete_buffer as CommandHandler,
     ]
 }
 
