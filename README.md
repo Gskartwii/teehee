@@ -62,8 +62,13 @@ Teehee supports multiple selections, efficient selection modifying commands and 
 * `:` to enter command mode
 	* `:q` to quit
 	* `:q!` to force quit (even if buffer dirty)
-	* `:w` to flush buffer to disk (currently doesn't support filename input)
-	* `:wq` to fluh buffer, then quit
+	* `:w` to flush buffer to disk
+	* `:w <filename>` to save buffer to named file
+	* `:wa` to flush all buffers to disk
+	* `:e <filename>` to open a new buffer
+	* `:db` to close a buffer
+	* `:db!` to close a buffer even if dirty
+	* `:wq` to flush buffer, then quit
 
 Entering a pattern:
 
