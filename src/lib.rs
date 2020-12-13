@@ -1,6 +1,7 @@
 mod buffer;
 mod byte_rope;
 pub mod hex_view;
+mod history;
 #[macro_use]
 mod keymap;
 mod mode;
