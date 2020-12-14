@@ -3,6 +3,7 @@ use std::convert::From;
 use std::fmt;
 use xi_rope::delta::*;
 use xi_rope::interval::*;
+use xi_rope::multiset::Subset;
 use xi_rope::tree::*;
 
 const MIN_LEAF: usize = 511;
@@ -129,6 +130,10 @@ impl Rope {
 
     pub fn apply_delta(&self, delta: &RopeDelta) -> Rope {
         Rope(delta.apply(&self.0))
+    }
+
+    pub fn without_subset(&self, subset: Subset) -> Rope {
+        Rope(subset.delete_from(&self.0))
     }
 
     pub fn into_node(self) -> Node<RopeInfo> {
