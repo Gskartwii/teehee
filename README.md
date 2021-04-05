@@ -93,3 +93,9 @@ a command.
 * Example: `50l`: Move 50 bytes to the right.
 * Example: `x500g`: Jump to offset 0x500
 * Example: `<a-s>x12xb`: Split selection into parts of 0x12 bytes.
+
+# Releases
+Releases are signed with the following PGP key:
+`9330E5D6861507BEFBF1893347E208E66179DC94`. The source code can be found on
+the [GitHub releases page](https://github.com/Gskartwii/teehee/releases), along
+with the signature of the source code tgz.
