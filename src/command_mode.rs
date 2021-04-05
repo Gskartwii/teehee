@@ -56,15 +56,25 @@ mod cmd {
         ModeTransition::new_mode(quitting::Quitting {})
     }
 
-    pub fn write(buf: &mut Buffers, _: &str) -> ModeTransition {
-        if let Some(path) = buf.current().path.as_ref() {
+    pub fn write(buf: &mut Buffers, filename: &str) -> ModeTransition {
+        let path = if filename.is_empty() {
+            buf.current().path.as_ref().map(|p| p.as_path())
+        } else {
+            Some(std::path::Path::new(&filename))
+        };
+
+        if let Some(path) = path {
             if let Err(e) = fs::write(&path, buf.current().data.slice_to_cow(..)) {
                 return ModeTransition::new_mode_and_info(
                     Normal::new(),
                     format!("write failed: {}", e),
                 );
             }
-            buf.current_mut().dirty = false;
+
+            let owned_path = path.to_owned();
+            let buf_mut = buf.current_mut();
+            buf_mut.dirty = false;
+            buf_mut.update_path_if_missing(owned_path);
             ModeTransition::new_mode(Normal::new())
         } else {
             ModeTransition::new_mode_and_info(Normal::new(), "buffer has no path".into())

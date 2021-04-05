@@ -148,6 +148,12 @@ impl Buffer {
             None
         }
     }
+
+    pub fn update_path_if_missing(&mut self, path: impl Into<PathBuf>) {
+        if self.path.is_none() {
+            self.path = Some(path.into());
+        }
+    }
 }
 
 pub struct Buffers {
