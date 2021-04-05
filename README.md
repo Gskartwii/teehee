@@ -1,10 +1,14 @@
 # Teehee - a modal terminal hex editor
 
+![AUR version](https://img.shields.io/aur/version/teehee)
+
 Inspired by Vim, Kakoune and Hiew.
 
 ## Installation
-Just run `cargo install teehee`! If you don't have rust, you can get it from [rustup.rs](https://rustup.rs).
-The application will be available as the executable `teehee`.
+Arch Linux users: The package for Arch Linux is available on [AUR](https://aur.archlinux.org/packages/teehee/).
+
+Others: Just run `cargo install teehee`! If you don't have rust, you can get it from [rustup.rs](https://rustup.rs).
+The application will be available as the executable `teehee`. More installation options may be coming in the future.
 
 ## Motivation
 
