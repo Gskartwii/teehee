@@ -128,23 +128,31 @@ mod cmd {
 
 type CommandHandler = fn(&mut Buffers, &str) -> ModeTransition;
 
+macro_rules! make_commands {
+    ($($string:tt => $cmd:ident,)*) => {
+        hashmap![
+            $($string.to_string() => (cmd::$cmd as CommandHandler),)*
+        ]
+    }
+}
+
 fn default_commands() -> HashMap<String, CommandHandler> {
-    hashmap![
-        "q".to_string() => cmd::quit as CommandHandler,
-        "quit".to_string() => cmd::quit as CommandHandler,
-        "q!".to_string() => cmd::force_quit as CommandHandler,
-        "quit!".to_string() => cmd::force_quit as CommandHandler,
-        "w".to_string() => cmd::write as CommandHandler,
-        "write".to_string() => cmd::write as CommandHandler,
-        "wq".to_string() => cmd::write_quit as CommandHandler,
-        "wa".to_string() => cmd::write_all as CommandHandler,
-        "write-all".to_string() => cmd::write_all as CommandHandler,
-        "e".to_string() => cmd::edit as CommandHandler,
-        "edit".to_string() => cmd::edit as CommandHandler,
-        "db".to_string() => cmd::delete_buffer as CommandHandler,
-        "delete-buffer".to_string() => cmd::delete_buffer as CommandHandler,
-        "db!".to_string() => cmd::force_delete_buffer as CommandHandler,
-        "delete-buffer!".to_string() => cmd::force_delete_buffer as CommandHandler,
+    make_commands![
+        "q" => quit,
+        "quit" => quit,
+        "q!" => force_quit,
+        "quit!" => force_quit,
+        "w" => write,
+        "write" => write,
+        "wq" => write_quit,
+        "wa" => write_all,
+        "write-all" => write_all,
+        "e" => edit,
+        "edit" => edit,
+        "db" => delete_buffer,
+        "delete-buffer" => delete_buffer,
+        "db!" => force_delete_buffer,
+        "delete-buffer!" => force_delete_buffer,
     ]
 }
 
