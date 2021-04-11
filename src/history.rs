@@ -2,6 +2,7 @@ use super::byte_rope::{Rope, RopeDelta};
 use xi_rope::delta::DeltaElement;
 use xi_rope::multiset::Subset;
 
+#[derive(Clone)]
 struct Action {
     delta: RopeDelta,
 }
@@ -55,7 +56,6 @@ impl Action {
 
         // (inserts, deletes, inserts_in_prefinal)
         (inserts_in_union, deletes_from_union, inserts_in_prefinal)
-
     }
 
     fn chain(self, after_self: &Rope, next: RopeDelta) -> Action {
@@ -65,24 +65,58 @@ impl Action {
         let tombstones = after_next.without_subset(inserts_in_prefinal.complement());
 
         Action {
-            delta: RopeDelta::synthesize(
-                &tombstones.into_node(),
-                &inserted,
-                &deleted,
-            ),
+            delta: RopeDelta::synthesize(&tombstones.into_node(), &inserted, &deleted),
         }
     }
 }
 
 struct History {
-    current_incomplete: Option<Action>,
+    partial: Option<Action>,
 
     undo: Vec<Action>,
     redo: Vec<Action>,
 }
 
 impl History {
-    fn commit(&mut self) {}
+    pub fn perform_final(&mut self, delta: RopeDelta) {
+        self.undo.push(Action::from_delta(delta));
+    }
+    pub fn perform_partial(&mut self, current_rope: &Rope, delta: RopeDelta) {
+        let delta_copy = delta.clone();
+        let replaced = self
+            .partial
+            .take()
+            .map(|old| old.chain(current_rope, delta))
+            .or_else(|| Some(Action::from_delta(delta_copy)));
+        self.partial = replaced;
+    }
+    pub fn commit_partial(&mut self) {
+        if let Some(partial) = self.partial.take() {
+            self.undo.push(partial);
+        }
+    }
+
+    pub fn undo(&mut self, current_rope: &Rope) -> Option<RopeDelta> {
+        match self.undo.pop() {
+            Some(action) => {
+                let undo_delta = action.invert(current_rope).delta;
+                self.redo.push(action);
+                Some(undo_delta)
+            }
+            None => None,
+        }
+    }
+
+    pub fn redo(&mut self, current_rope: &Rope) -> Option<RopeDelta> {
+        match self.redo.pop() {
+            Some(action) => {
+                let redo_delta = action.invert(current_rope).delta;
+                self.undo.push(action);
+                Some(redo_delta)
+            }
+            None => None,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -170,7 +204,8 @@ mod test {
         let final_rope = mid_rope.apply_delta(&deletion2);
 
         assert_eq!(&final_rope.slice_to_cow(..), &vec![2, 3]);
-        let chained_subsets = Action::from_delta(deletion1.clone()).subsets_for_chain(deletion2.clone());
+        let chained_subsets =
+            Action::from_delta(deletion1.clone()).subsets_for_chain(deletion2.clone());
         assert_eq!(&chained_subsets.0.delete_from_string("0123"), "0123");
         assert_eq!(&chained_subsets.1.delete_from_string("0123"), "23");
         assert_eq!(&chained_subsets.2.delete_from_string("123"), "123");
@@ -194,7 +229,8 @@ mod test {
         let final_rope = mid_rope.apply_delta(&insertion);
 
         assert_eq!(&final_rope.slice_to_cow(..), &vec![1, 5, 6, 2, 3]);
-        let chained_subsets = Action::from_delta(deletion1.clone()).subsets_for_chain(insertion.clone());
+        let chained_subsets =
+            Action::from_delta(deletion1.clone()).subsets_for_chain(insertion.clone());
         assert_eq!(&chained_subsets.0.delete_from_string("015623"), "0123");
         assert_eq!(&chained_subsets.1.delete_from_string("015623"), "15623");
         assert_eq!(&chained_subsets.2.delete_from_string("15623"), "123");
@@ -218,7 +254,8 @@ mod test {
         let final_rope = mid_rope.apply_delta(&deletion);
 
         assert_eq!(&final_rope.slice_to_cow(..), &vec![6, 7, 0, 1, 2, 3]);
-        let chained_subsets = Action::from_delta(insertion.clone()).subsets_for_chain(deletion.clone());
+        let chained_subsets =
+            Action::from_delta(insertion.clone()).subsets_for_chain(deletion.clone());
         assert_eq!(&chained_subsets.0.delete_from_string("5670123"), "0123");
         assert_eq!(&chained_subsets.1.delete_from_string("5670123"), "670123");
         assert_eq!(&chained_subsets.2.delete_from_string("5670123"), "0123");
@@ -242,7 +279,8 @@ mod test {
         let final_rope = mid_rope.apply_delta(&insertion2);
 
         assert_eq!(&final_rope.slice_to_cow(..), &vec![0, 5, 6, 1, 2, 3]);
-        let chained_subsets = Action::from_delta(insertion1.clone()).subsets_for_chain(insertion2.clone());
+        let chained_subsets =
+            Action::from_delta(insertion1.clone()).subsets_for_chain(insertion2.clone());
         assert_eq!(&chained_subsets.0.delete_from_string("056123"), "0123");
         assert_eq!(&chained_subsets.1.delete_from_string("056123"), "056123");
         assert_eq!(&chained_subsets.2.delete_from_string("056123"), "0123");
