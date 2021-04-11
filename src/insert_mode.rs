@@ -76,7 +76,7 @@ fn transition_hex_insertion(
                 hex: true,
                 hex_half: Some(to_insert),
             },
-            buffer.apply_delta_offset_carets(delta, -1, 0),
+            buffer.apply_incomplete_delta_offset_carets(delta, -1, 0),
         ))
     } else {
         let delta = ops::change(&buffer.data, &buffer.selection, vec![to_insert]);
@@ -86,7 +86,7 @@ fn transition_hex_insertion(
                 hex: true,
                 hex_half: None,
             },
-            buffer.apply_delta(delta),
+            buffer.apply_incomplete_delta(delta),
         ))
     }
 }
@@ -116,11 +116,14 @@ impl Mode for Insert {
                 *self
             };
             Some(match action {
-                Action::Exit => ModeTransition::new_mode(Normal::new()),
+                Action::Exit => {
+                    buffer.commit_delta(); // Flush this insertion as a single action
+                    ModeTransition::new_mode(Normal::new())
+                },
                 Action::InsertNull => {
                     let inserted_bytes = vec![0];
                     let delta = ops::insert(&buffer.data, &buffer.selection, inserted_bytes);
-                    ModeTransition::new_mode_and_dirty(new_state, buffer.apply_delta(delta))
+                    ModeTransition::new_mode_and_dirty(new_state, buffer.apply_incomplete_delta(delta))
                 }
                 Action::SwitchInputMode => ModeTransition::new_mode(Insert {
                     before: self.before,
@@ -132,21 +135,21 @@ impl Mode for Insert {
                         return Some(ModeTransition::None);
                     }
                     let delta = ops::delete_cursor(&buffer.data, &buffer.selection);
-                    ModeTransition::new_mode_and_dirty(new_state, buffer.apply_delta(delta))
+                    ModeTransition::new_mode_and_dirty(new_state, buffer.apply_incomplete_delta(delta))
                 }
                 Action::RemoveLast => {
                     if buffer.data.is_empty() {
                         return Some(ModeTransition::None);
                     }
                     let delta = ops::backspace(&buffer.data, &buffer.selection);
-                    ModeTransition::DirtyBytes(buffer.apply_delta(delta))
+                    ModeTransition::DirtyBytes(buffer.apply_incomplete_delta(delta))
                 }
                 Action::RemoveThis => {
                     if buffer.data.is_empty() {
                         return Some(ModeTransition::None);
                     }
                     let delta = ops::delete_cursor(&buffer.data, &buffer.selection);
-                    ModeTransition::DirtyBytes(buffer.apply_delta(delta))
+                    ModeTransition::DirtyBytes(buffer.apply_incomplete_delta(delta))
                 }
             })
         } else if let Event::Key(KeyEvent {
