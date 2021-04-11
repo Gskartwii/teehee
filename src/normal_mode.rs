@@ -200,7 +200,7 @@ impl Mode for Normal {
                     buffer.yank_selections(register);
                     if !buffer.data.is_empty() {
                         let delta = ops::deletion(&buffer.data, &buffer.selection);
-                        ModeTransition::DirtyBytes(buffer.apply_delta(&delta))
+                        ModeTransition::DirtyBytes(buffer.apply_delta(delta))
                     } else {
                         ModeTransition::None
                     }
@@ -215,7 +215,7 @@ impl Mode for Normal {
                                 before: true,
                                 hex_half: None,
                             },
-                            buffer.apply_delta(&delta),
+                            buffer.apply_delta(delta),
                         )
                     } else {
                         ModeTransition::new_mode(modes::insert::Insert {
@@ -237,7 +237,7 @@ impl Mode for Normal {
                         after,
                         self.count_state.to_count(),
                     );
-                    ModeTransition::DirtyBytes(buffer.apply_delta(&delta))
+                    ModeTransition::DirtyBytes(buffer.apply_delta(delta))
                 }
                 // selection indexing in the UI starts at 1
                 // hence we check for count > 0 and offset by -1

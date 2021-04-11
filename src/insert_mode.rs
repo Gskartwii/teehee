@@ -51,7 +51,7 @@ fn transition_ascii_insertion(key: char, buffer: &mut Buffer) -> ModeTransition 
     // the cursors will have been moved in normal mode to their
     // correct places.
     let delta = ops::insert(&buffer.data, &buffer.selection, inserted_bytes);
-    ModeTransition::DirtyBytes(buffer.apply_delta(&delta))
+    ModeTransition::DirtyBytes(buffer.apply_delta(delta))
 }
 
 fn transition_hex_insertion(
@@ -76,7 +76,7 @@ fn transition_hex_insertion(
                 hex: true,
                 hex_half: Some(to_insert),
             },
-            buffer.apply_delta_offset_carets(&delta, -1, 0),
+            buffer.apply_delta_offset_carets(delta, -1, 0),
         ))
     } else {
         let delta = ops::change(&buffer.data, &buffer.selection, vec![to_insert]);
@@ -86,7 +86,7 @@ fn transition_hex_insertion(
                 hex: true,
                 hex_half: None,
             },
-            buffer.apply_delta(&delta),
+            buffer.apply_delta(delta),
         ))
     }
 }
@@ -120,7 +120,7 @@ impl Mode for Insert {
                 Action::InsertNull => {
                     let inserted_bytes = vec![0];
                     let delta = ops::insert(&buffer.data, &buffer.selection, inserted_bytes);
-                    ModeTransition::new_mode_and_dirty(new_state, buffer.apply_delta(&delta))
+                    ModeTransition::new_mode_and_dirty(new_state, buffer.apply_delta(delta))
                 }
                 Action::SwitchInputMode => ModeTransition::new_mode(Insert {
                     before: self.before,
@@ -132,21 +132,21 @@ impl Mode for Insert {
                         return Some(ModeTransition::None);
                     }
                     let delta = ops::delete_cursor(&buffer.data, &buffer.selection);
-                    ModeTransition::new_mode_and_dirty(new_state, buffer.apply_delta(&delta))
+                    ModeTransition::new_mode_and_dirty(new_state, buffer.apply_delta(delta))
                 }
                 Action::RemoveLast => {
                     if buffer.data.is_empty() {
                         return Some(ModeTransition::None);
                     }
                     let delta = ops::backspace(&buffer.data, &buffer.selection);
-                    ModeTransition::DirtyBytes(buffer.apply_delta(&delta))
+                    ModeTransition::DirtyBytes(buffer.apply_delta(delta))
                 }
                 Action::RemoveThis => {
                     if buffer.data.is_empty() {
                         return Some(ModeTransition::None);
                     }
                     let delta = ops::delete_cursor(&buffer.data, &buffer.selection);
-                    ModeTransition::DirtyBytes(buffer.apply_delta(&delta))
+                    ModeTransition::DirtyBytes(buffer.apply_delta(delta))
                 }
             })
         } else if let Event::Key(KeyEvent {

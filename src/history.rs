@@ -1,5 +1,4 @@
 use super::byte_rope::{Rope, RopeDelta};
-use xi_rope::delta::DeltaElement;
 use xi_rope::multiset::Subset;
 
 #[derive(Clone)]
@@ -51,7 +50,6 @@ impl Action {
 
         let inserts_in_mid_text = inserts_in_mid_union.transform_shrink(&deletes_from_mid_union);
         let prefinal_insertion = ins2.inserted_subset();
-        let deletes_from_prefinal = del2.transform_expand(&prefinal_insertion);
         let inserts_in_prefinal = inserts_in_mid_text.transform_union(&prefinal_insertion);
 
         // (inserts, deletes, inserts_in_prefinal)
@@ -70,7 +68,8 @@ impl Action {
     }
 }
 
-struct History {
+#[derive(Clone, Default)]
+pub struct History {
     partial: Option<Action>,
 
     undo: Vec<Action>,
@@ -78,6 +77,10 @@ struct History {
 }
 
 impl History {
+    pub fn new() -> Self {
+        Default::default()
+    }
+
     pub fn perform_final(&mut self, delta: RopeDelta) {
         self.undo.push(Action::from_delta(delta));
     }
@@ -122,7 +125,6 @@ impl History {
 #[cfg(test)]
 mod test {
     use super::*;
-    use xi_rope::delta::{Delta, DeltaElement};
     use xi_rope::DeltaBuilder;
 
     #[test]

@@ -55,7 +55,7 @@ impl Mode for Replace {
                         let delta = ops::replace(&buffer.data, &buffer.selection, 0);
                         Some(ModeTransition::new_mode_and_dirty(
                             Normal::new(),
-                            buffer.apply_delta(&delta),
+                            buffer.apply_delta(delta),
                         ))
                     }
                 };
@@ -69,7 +69,7 @@ impl Mode for Replace {
                 let delta = ops::replace(&buffer.data, &buffer.selection, *ch as u8); // lossy!
                 Some(ModeTransition::new_mode_and_dirty(
                     Normal::new(),
-                    buffer.apply_delta(&delta),
+                    buffer.apply_delta(delta),
                 ))
             } else if self.hex_half.is_none() {
                 if !ch.is_ascii_hexdigit() {
@@ -90,7 +90,7 @@ impl Mode for Replace {
                 let delta = ops::replace(&buffer.data, &buffer.selection, replacing_ch); // lossy!
                 Some(ModeTransition::new_mode_and_dirty(
                     Normal::new(),
-                    buffer.apply_delta(&delta),
+                    buffer.apply_delta(delta),
                 ))
             }
         } else if let Event::Key(_) = evt {

@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use super::byte_rope::*;
+use super::history::History;
 use super::mode::*;
 use super::selection::*;
 
@@ -21,6 +22,8 @@ pub struct Buffer {
     pub selection: Selection,
     pub registers: HashMap<char, Vec<Vec<u8>>>,
     pub dirty: bool,
+
+    history: History,
 }
 
 impl Buffer {
@@ -31,6 +34,7 @@ impl Buffer {
             registers: HashMap::new(),
             dirty: false,
             path: path.map(Into::into),
+            history: History::new(),
         }
     }
 
@@ -70,26 +74,58 @@ impl Buffer {
         DirtyBytes::ChangeInPlace(disjoint_invalidated_ranges)
     }
 
-    pub fn apply_delta(&mut self, delta: &RopeDelta) -> DirtyBytes {
-        self.selection.apply_delta(&delta, self.data.len());
+    fn apply_delta_to_buffer(&mut self, delta: RopeDelta, is_final: bool) {
         self.data = self.data.apply_delta(&delta);
+        if is_final {
+            self.history.perform_final(delta);
+        } else {
+            self.history.perform_partial(&self.data, delta);
+        }
         self.dirty = true;
+    }
+
+    pub fn apply_delta(&mut self, delta: RopeDelta) -> DirtyBytes {
+        self.selection.apply_delta(&delta, self.data.len());
+        self.apply_delta_to_buffer(delta, true);
 
         DirtyBytes::ChangeLength
     }
 
     pub fn apply_delta_offset_carets(
         &mut self,
-        delta: &RopeDelta,
+        delta: RopeDelta,
         caret_offset: isize,
         tail_offset: isize,
     ) -> DirtyBytes {
         self.selection
-            .apply_delta_offset_carets(delta, caret_offset, tail_offset, self.data.len());
-        self.data = self.data.apply_delta(&delta);
-        self.dirty = true;
+            .apply_delta_offset_carets(&delta, caret_offset, tail_offset, self.data.len());
+        self.apply_delta_to_buffer(delta, true);
 
         DirtyBytes::ChangeLength
+    }
+
+    pub fn apply_incomplete_delta(&mut self, delta: RopeDelta) -> DirtyBytes {
+        self.selection.apply_delta(&delta, self.data.len());
+        self.apply_delta_to_buffer(delta, false);
+
+        DirtyBytes::ChangeLength
+    }
+
+    pub fn apply_incomplete_delta_offset_carets(
+        &mut self,
+        delta: RopeDelta,
+        caret_offset: isize,
+        tail_offset: isize,
+    ) -> DirtyBytes {
+        self.selection
+            .apply_delta_offset_carets(&delta, caret_offset, tail_offset, self.data.len());
+        self.apply_delta_to_buffer(delta, false);
+
+        DirtyBytes::ChangeLength
+    }
+
+    pub fn commit_delta(&mut self) {
+        self.history.commit_partial();
     }
 
     fn switch_main_sel(&mut self, f: impl FnOnce(&mut Selection)) -> DirtyBytes {
