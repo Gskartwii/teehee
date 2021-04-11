@@ -62,9 +62,7 @@ impl Action {
         let after_next = after_self.apply_delta(&next.clone().factor().0); // don't do prefinal deletions
         let (inserted, deleted, inserts_in_prefinal) = self.subsets_for_chain(next);
 
-        let tombstones = dbg!(after_next.without_subset(inserts_in_prefinal.complement()));
-        dbg!(&inserted);
-        dbg!(&deleted);
+        let tombstones = after_next.without_subset(inserts_in_prefinal.complement());
 
         Action {
             delta: RopeDelta::synthesize(
