@@ -13,7 +13,8 @@ impl Action {
     fn invert(&self, base_rope: &Rope) -> Action {
         let (inserts, deletions) = self.delta.clone().factor();
         let ins_subset = inserts.inserted_subset();
-        let deleted_now = base_rope.without_subset(deletions.complement());
+        dbg!(&base_rope);
+        let deleted_now = dbg!(base_rope.without_subset(deletions.complement()));
 
         let deletions_from_base = deletions.transform_expand(&ins_subset);
         let deletions_from_inverted = ins_subset;
@@ -81,17 +82,18 @@ impl History {
         Default::default()
     }
 
-    pub fn perform_final(&mut self, delta: RopeDelta) {
-        self.undo.push(Action::from_delta(delta));
+    pub fn perform_final(&mut self, current_rope: &Rope, delta: RopeDelta) {
+        self.undo
+            .push(Action::from_delta(delta).invert(current_rope));
     }
     pub fn perform_partial(&mut self, current_rope: &Rope, delta: RopeDelta) {
-        let delta_copy = delta.clone();
-        let replaced = self
-            .partial
-            .take()
-            .map(|old| old.chain(current_rope, delta))
-            .or_else(|| Some(Action::from_delta(delta_copy)));
-        self.partial = replaced;
+        let this_inversion = Action::from_delta(delta).invert(current_rope);
+
+        let replaced = self.partial.take().map_or_else(
+            || this_inversion.clone(),
+            |old| this_inversion.clone().chain(current_rope, old.delta),
+        );
+        self.partial = Some(replaced);
     }
     pub fn commit_partial(&mut self) {
         if let Some(partial) = self.partial.take() {
@@ -99,22 +101,22 @@ impl History {
         }
     }
 
-    pub fn undo(&mut self, current_rope: &Rope) -> Option<RopeDelta> {
+    pub fn undo(&mut self) -> Option<RopeDelta> {
         match self.undo.pop() {
             Some(action) => {
-                let undo_delta = action.invert(current_rope).delta;
-                self.redo.push(action);
+                let undo_delta = action.delta;
+                //self.redo.push(action);
                 Some(undo_delta)
             }
             None => None,
         }
     }
 
-    pub fn redo(&mut self, current_rope: &Rope) -> Option<RopeDelta> {
+    pub fn redo(&mut self) -> Option<RopeDelta> {
         match self.redo.pop() {
             Some(action) => {
-                let redo_delta = action.invert(current_rope).delta;
-                self.undo.push(action);
+                let redo_delta = action.delta;
+                //self.undo.push(action);
                 Some(redo_delta)
             }
             None => None,

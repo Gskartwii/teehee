@@ -75,12 +75,13 @@ impl Buffer {
     }
 
     fn apply_delta_to_buffer(&mut self, delta: RopeDelta, is_final: bool) {
-        self.data = self.data.apply_delta(&delta);
+        let next_data = self.data.apply_delta(&delta);
         if is_final {
-            self.history.perform_final(delta);
+            self.history.perform_final(&self.data, delta);
         } else {
             self.history.perform_partial(&self.data, delta);
         }
+        self.data = next_data;
         self.dirty = true;
     }
 
@@ -97,8 +98,12 @@ impl Buffer {
         caret_offset: isize,
         tail_offset: isize,
     ) -> DirtyBytes {
-        self.selection
-            .apply_delta_offset_carets(&delta, caret_offset, tail_offset, self.data.len());
+        self.selection.apply_delta_offset_carets(
+            &delta,
+            caret_offset,
+            tail_offset,
+            self.data.len(),
+        );
         self.apply_delta_to_buffer(delta, true);
 
         DirtyBytes::ChangeLength
@@ -117,8 +122,12 @@ impl Buffer {
         caret_offset: isize,
         tail_offset: isize,
     ) -> DirtyBytes {
-        self.selection
-            .apply_delta_offset_carets(&delta, caret_offset, tail_offset, self.data.len());
+        self.selection.apply_delta_offset_carets(
+            &delta,
+            caret_offset,
+            tail_offset,
+            self.data.len(),
+        );
         self.apply_delta_to_buffer(delta, false);
 
         DirtyBytes::ChangeLength
@@ -126,6 +135,28 @@ impl Buffer {
 
     pub fn commit_delta(&mut self) {
         self.history.commit_partial();
+    }
+
+    pub fn perform_undo(&mut self) -> Option<DirtyBytes> {
+        if let Some(undo_delta) = self.history.undo() {
+            self.selection.apply_delta(&undo_delta, self.data.len());
+            self.data = self.data.apply_delta(&undo_delta);
+            self.dirty = true;
+            Some(DirtyBytes::ChangeLength)
+        } else {
+            None
+        }
+    }
+
+    pub fn perform_redo(&mut self) -> Option<DirtyBytes> {
+        if let Some(redo_delta) = self.history.redo() {
+            self.selection.apply_delta(&redo_delta, self.data.len());
+            self.data = self.data.apply_delta(&redo_delta);
+            self.dirty = true;
+            Some(DirtyBytes::ChangeLength)
+        } else {
+            None
+        }
     }
 
     fn switch_main_sel(&mut self, f: impl FnOnce(&mut Selection)) -> DirtyBytes {

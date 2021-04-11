@@ -41,6 +41,8 @@ enum Action {
     SelectAll,
     ReplaceMode { hex: bool },
     Measure,
+    Undo,
+    Redo,
 }
 
 fn default_maps() -> KeyMap<Action> {
@@ -66,6 +68,8 @@ fn default_maps() -> KeyMap<Action> {
             ('(' => Action::SelectPrev),
             (')' => Action::SelectNext),
             ('M' => Action::Measure),
+            ('u' => Action::Undo),
+            ('U' => Action::Redo),
 
             ('p' => Action::Paste{after: true, register: '"'}),
             ('P' => Action::Paste{after: false, register: '"'}),
@@ -292,6 +296,24 @@ impl Mode for Normal {
                     ),
                 ),
                 Action::CommandMode => ModeTransition::new_mode(modes::command::Command::new()),
+                Action::Undo => buffer.perform_undo().map_or_else(
+                    || {
+                        ModeTransition::new_mode_and_info(
+                            Normal::new(),
+                            "nothing left to undo".to_owned(),
+                        )
+                    },
+                    |dirty| ModeTransition::new_mode_and_dirty(Normal::new(), dirty),
+                ),
+                Action::Redo => buffer.perform_redo().map_or_else(
+                    || {
+                        ModeTransition::new_mode_and_info(
+                            Normal::new(),
+                            "nothing left to redo".to_owned(),
+                        )
+                    },
+                    |dirty| ModeTransition::new_mode_and_dirty(Normal::new(), dirty),
+                ),
             })
         } else {
             None

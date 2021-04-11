@@ -119,11 +119,14 @@ impl Mode for Insert {
                 Action::Exit => {
                     buffer.commit_delta(); // Flush this insertion as a single action
                     ModeTransition::new_mode(Normal::new())
-                },
+                }
                 Action::InsertNull => {
                     let inserted_bytes = vec![0];
                     let delta = ops::insert(&buffer.data, &buffer.selection, inserted_bytes);
-                    ModeTransition::new_mode_and_dirty(new_state, buffer.apply_incomplete_delta(delta))
+                    ModeTransition::new_mode_and_dirty(
+                        new_state,
+                        buffer.apply_incomplete_delta(delta),
+                    )
                 }
                 Action::SwitchInputMode => ModeTransition::new_mode(Insert {
                     before: self.before,
@@ -135,7 +138,10 @@ impl Mode for Insert {
                         return Some(ModeTransition::None);
                     }
                     let delta = ops::delete_cursor(&buffer.data, &buffer.selection);
-                    ModeTransition::new_mode_and_dirty(new_state, buffer.apply_incomplete_delta(delta))
+                    ModeTransition::new_mode_and_dirty(
+                        new_state,
+                        buffer.apply_incomplete_delta(delta),
+                    )
                 }
                 Action::RemoveLast => {
                     if buffer.data.is_empty() {
