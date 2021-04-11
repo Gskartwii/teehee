@@ -56,15 +56,25 @@ mod cmd {
         ModeTransition::new_mode(quitting::Quitting {})
     }
 
-    pub fn write(buf: &mut Buffers, _: &str) -> ModeTransition {
-        if let Some(path) = buf.current().path.as_ref() {
+    pub fn write(buf: &mut Buffers, filename: &str) -> ModeTransition {
+        let path = if filename.is_empty() {
+            buf.current().path.as_ref().map(|p| p.as_path())
+        } else {
+            Some(std::path::Path::new(&filename))
+        };
+
+        if let Some(path) = path {
             if let Err(e) = fs::write(&path, buf.current().data.slice_to_cow(..)) {
                 return ModeTransition::new_mode_and_info(
                     Normal::new(),
                     format!("write failed: {}", e),
                 );
             }
-            buf.current_mut().dirty = false;
+
+            let owned_path = path.to_owned();
+            let buf_mut = buf.current_mut();
+            buf_mut.dirty = false;
+            buf_mut.update_path_if_missing(owned_path);
             ModeTransition::new_mode(Normal::new())
         } else {
             ModeTransition::new_mode_and_info(Normal::new(), "buffer has no path".into())
@@ -128,23 +138,31 @@ mod cmd {
 
 type CommandHandler = fn(&mut Buffers, &str) -> ModeTransition;
 
+macro_rules! make_commands {
+    ($($string:tt => $cmd:ident,)*) => {
+        hashmap![
+            $($string.to_string() => (cmd::$cmd as CommandHandler),)*
+        ]
+    }
+}
+
 fn default_commands() -> HashMap<String, CommandHandler> {
-    hashmap![
-        "q".to_string() => cmd::quit as CommandHandler,
-        "quit".to_string() => cmd::quit as CommandHandler,
-        "q!".to_string() => cmd::force_quit as CommandHandler,
-        "quit!".to_string() => cmd::force_quit as CommandHandler,
-        "w".to_string() => cmd::write as CommandHandler,
-        "write".to_string() => cmd::write as CommandHandler,
-        "wq".to_string() => cmd::write_quit as CommandHandler,
-        "wa".to_string() => cmd::write_all as CommandHandler,
-        "write-all".to_string() => cmd::write_all as CommandHandler,
-        "e".to_string() => cmd::edit as CommandHandler,
-        "edit".to_string() => cmd::edit as CommandHandler,
-        "db".to_string() => cmd::delete_buffer as CommandHandler,
-        "delete-buffer".to_string() => cmd::delete_buffer as CommandHandler,
-        "db!".to_string() => cmd::force_delete_buffer as CommandHandler,
-        "delete-buffer!".to_string() => cmd::force_delete_buffer as CommandHandler,
+    make_commands![
+        "q" => quit,
+        "quit" => quit,
+        "q!" => force_quit,
+        "quit!" => force_quit,
+        "w" => write,
+        "write" => write,
+        "wq" => write_quit,
+        "wa" => write_all,
+        "write-all" => write_all,
+        "e" => edit,
+        "edit" => edit,
+        "db" => delete_buffer,
+        "delete-buffer" => delete_buffer,
+        "db!" => force_delete_buffer,
+        "delete-buffer!" => force_delete_buffer,
     ]
 }
 

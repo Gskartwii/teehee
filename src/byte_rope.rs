@@ -142,7 +142,7 @@ impl Rope {
 }
 
 impl From<Vec<u8>> for Rope {
-    fn from(mut vec: Vec<u8>) -> Self {
+    fn from(vec: Vec<u8>) -> Self {
         let mut builder = TreeBuilder::new();
         if vec.len() <= MAX_LEAF {
             if !vec.is_empty() {
@@ -150,11 +150,13 @@ impl From<Vec<u8>> for Rope {
             }
             return Rope(builder.build());
         }
-        while !vec.is_empty() {
-            let split_point = std::cmp::min(vec.len(), MAX_LEAF);
-            let rest = vec.split_off(split_point);
-            builder.push_leaf(Bytes(vec));
-            vec = rest;
+        let mut source = vec.as_slice();
+
+        while !source.is_empty() {
+            let split_point = std::cmp::min(source.len(), MAX_LEAF);
+            let (piece, rest) = source.split_at(split_point);
+            builder.push_leaf(Bytes(piece.to_vec()));
+            source = rest;
         }
         Rope(builder.build())
     }
