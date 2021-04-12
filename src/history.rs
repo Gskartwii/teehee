@@ -13,8 +13,7 @@ impl Action {
     fn invert(&self, base_rope: &Rope) -> Action {
         let (inserts, deletions) = self.delta.clone().factor();
         let ins_subset = inserts.inserted_subset();
-        dbg!(&base_rope);
-        let deleted_now = dbg!(base_rope.without_subset(deletions.complement()));
+        let deleted_now = base_rope.without_subset(deletions.complement());
 
         let deletions_from_base = deletions.transform_expand(&ins_subset);
         let deletions_from_inverted = ins_subset;
@@ -101,22 +100,22 @@ impl History {
         }
     }
 
-    pub fn undo(&mut self) -> Option<RopeDelta> {
+    pub fn undo(&mut self, current_rope: &Rope) -> Option<RopeDelta> {
         match self.undo.pop() {
             Some(action) => {
+                self.redo.push(action.invert(current_rope));
                 let undo_delta = action.delta;
-                //self.redo.push(action);
                 Some(undo_delta)
             }
             None => None,
         }
     }
 
-    pub fn redo(&mut self) -> Option<RopeDelta> {
+    pub fn redo(&mut self, current_rope: &Rope) -> Option<RopeDelta> {
         match self.redo.pop() {
             Some(action) => {
+                self.undo.push(action.invert(current_rope));
                 let redo_delta = action.delta;
-                //self.undo.push(action);
                 Some(redo_delta)
             }
             None => None,

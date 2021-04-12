@@ -138,7 +138,7 @@ impl Buffer {
     }
 
     pub fn perform_undo(&mut self) -> Option<DirtyBytes> {
-        if let Some(undo_delta) = self.history.undo() {
+        if let Some(undo_delta) = self.history.undo(&self.data) {
             self.selection.apply_delta(&undo_delta, self.data.len());
             self.data = self.data.apply_delta(&undo_delta);
             self.dirty = true;
@@ -149,7 +149,7 @@ impl Buffer {
     }
 
     pub fn perform_redo(&mut self) -> Option<DirtyBytes> {
-        if let Some(redo_delta) = self.history.redo() {
+        if let Some(redo_delta) = self.history.redo(&self.data) {
             self.selection.apply_delta(&redo_delta, self.data.len());
             self.data = self.data.apply_delta(&redo_delta);
             self.dirty = true;
