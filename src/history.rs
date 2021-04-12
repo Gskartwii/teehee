@@ -84,6 +84,7 @@ impl History {
     pub fn perform_final(&mut self, current_rope: &Rope, delta: RopeDelta) {
         self.undo
             .push(Action::from_delta(delta).invert(current_rope));
+        self.redo = vec![];
     }
     pub fn perform_partial(&mut self, current_rope: &Rope, delta: RopeDelta) {
         let this_inversion = Action::from_delta(delta).invert(current_rope);
@@ -97,6 +98,7 @@ impl History {
     pub fn commit_partial(&mut self) {
         if let Some(partial) = self.partial.take() {
             self.undo.push(partial);
+            self.redo = vec![];
         }
     }
 
