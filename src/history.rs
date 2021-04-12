@@ -1,4 +1,5 @@
 use super::byte_rope::{Rope, RopeDelta};
+use super::selection::Selection;
 use xi_rope::multiset::Subset;
 
 #[derive(Clone)]
@@ -70,10 +71,10 @@ impl Action {
 
 #[derive(Clone, Default)]
 pub struct History {
-    partial: Option<Action>,
+    partial: Option<(Action, Selection)>,
 
-    undo: Vec<Action>,
-    redo: Vec<Action>,
+    undo: Vec<(Action, Selection)>,
+    redo: Vec<(Action, Selection)>,
 }
 
 impl History {
@@ -81,44 +82,44 @@ impl History {
         Default::default()
     }
 
-    pub fn perform_final(&mut self, current_rope: &Rope, delta: RopeDelta) {
+    pub fn perform_final(&mut self, current_rope: &Rope, delta: RopeDelta, selection: Selection) {
         self.undo
-            .push(Action::from_delta(delta).invert(current_rope));
+            .push((Action::from_delta(delta).invert(current_rope), selection));
         self.redo = vec![];
     }
-    pub fn perform_partial(&mut self, current_rope: &Rope, delta: RopeDelta) {
+    pub fn perform_partial(&mut self, current_rope: &Rope, delta: RopeDelta, selection: &Selection) {
         let this_inversion = Action::from_delta(delta).invert(current_rope);
 
         let replaced = self.partial.take().map_or_else(
-            || this_inversion.clone(),
-            |old| this_inversion.clone().chain(current_rope, old.delta),
+            || (this_inversion.clone(), selection.clone()),
+            |(action, selection)| (this_inversion.clone().chain(current_rope, action.delta), selection),
         );
         self.partial = Some(replaced);
     }
-    pub fn commit_partial(&mut self) {
-        if let Some(partial) = self.partial.take() {
-            self.undo.push(partial);
+    pub fn commit_partial(&mut self,) {
+        if let Some((partial, selection)) = self.partial.take() {
+            self.undo.push((partial, selection));
             self.redo = vec![];
         }
     }
 
-    pub fn undo(&mut self, current_rope: &Rope) -> Option<RopeDelta> {
+    pub fn undo(&mut self, current_rope: &Rope, selection: Selection) -> Option<(RopeDelta, Selection)> {
         match self.undo.pop() {
-            Some(action) => {
-                self.redo.push(action.invert(current_rope));
+            Some((action, old_selection)) => {
+                self.redo.push((action.invert(current_rope), selection));
                 let undo_delta = action.delta;
-                Some(undo_delta)
+                Some((undo_delta, old_selection))
             }
             None => None,
         }
     }
 
-    pub fn redo(&mut self, current_rope: &Rope) -> Option<RopeDelta> {
+    pub fn redo(&mut self, current_rope: &Rope, selection: Selection) -> Option<(RopeDelta, Selection)> {
         match self.redo.pop() {
-            Some(action) => {
-                self.undo.push(action.invert(current_rope));
+            Some((action, old_selection)) => {
+                self.undo.push((action.invert(current_rope), selection));
                 let redo_delta = action.delta;
-                Some(redo_delta)
+                Some((redo_delta, old_selection))
             }
             None => None,
         }
