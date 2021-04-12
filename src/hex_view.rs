@@ -867,7 +867,7 @@ impl HexView {
     fn draw(&self, stdout: &mut impl Write) -> Result<time::Duration> {
         let begin = time::Instant::now();
 
-        queue!(stdout, cursor::MoveTo(0, 0))?;
+        queue!(stdout, cursor::MoveTo(0, 0), terminal::Clear(terminal::ClearType::All))?;
 
         let visible_bytes = self.visible_bytes();
         let start_index = visible_bytes.start;
@@ -896,12 +896,10 @@ impl HexView {
                 },
             )?;
         }
-        queue!(stdout, terminal::Clear(terminal::ClearType::UntilNewLine))?;
 
         let new_full_rows =
             (end_index - start_index + self.bytes_per_line - 1) / self.bytes_per_line;
         if new_full_rows != self.last_visible_rows.get() {
-            queue!(stdout, terminal::Clear(terminal::ClearType::FromCursorDown))?;
             self.last_visible_rows.set(new_full_rows);
         }
 
