@@ -385,9 +385,9 @@ impl SelRegion {
     pub fn merge(&self, other: &SelRegion) -> SelRegion {
         let both_forward = self.forward() && other.forward();
         let both_backward = self.backward() && other.backward();
-        match (both_forward, both_backward) {
+        let mut merged = match (both_forward, both_backward) {
             (true, true) => {
-                assert_eq!(self, other, "Can't merge disjoint cursor selections");
+                assert_eq!(self.caret, other.caret, "Can't merge disjoint cursor selections");
                 *self
             }
             (true, false) => SelRegion::new(
@@ -399,7 +399,11 @@ impl SelRegion {
                 cmp::max(self.tail, other.tail),
             ),
             _ => panic!("Can't merge selections going in different directions"),
+        };
+        if self.main || other.main {
+            merged.main = true;
         }
+        merged
     }
 
     pub fn inherit_direction(&self, parent: &SelRegion) -> SelRegion {
