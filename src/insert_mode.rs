@@ -51,7 +51,7 @@ fn transition_ascii_insertion(key: char, buffer: &mut Buffer) -> ModeTransition 
     // the cursors will have been moved in normal mode to their
     // correct places.
     let delta = ops::insert(&buffer.data, &buffer.selection, inserted_bytes);
-    ModeTransition::DirtyBytes(buffer.apply_delta(delta))
+    ModeTransition::DirtyBytes(buffer.apply_incomplete_delta(delta))
 }
 
 fn transition_hex_insertion(
