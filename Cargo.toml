@@ -1,7 +1,7 @@
 [package]
 name = "teehee"
 description = "Hex editor with inspiration from Vim, Kakoune and Hiew"
-version = "0.2.2"
+version = "0.2.3"
 authors = ["Gskartwii <ahannula4@gmail.com>"]
 license = "Apache-2.0"
 edition = "2018"
