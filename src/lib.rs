@@ -1,12 +1,12 @@
 mod buffer;
 mod byte_rope;
-pub mod hex_view;
 mod history;
 #[macro_use]
 mod keymap;
 mod mode;
 mod operations;
 mod selection;
+mod view;
 
 mod cmd_count;
 
@@ -56,3 +56,4 @@ mod modes {
 }
 
 pub use buffer::{Buffer, Buffers};
+pub use view::hex_view;
