@@ -4,18 +4,9 @@ use crossterm::queue;
 use crossterm::style;
 use crossterm::Result;
 
-#[derive(Debug, Clone, Copy)]
-pub enum Priority {
-    Basic,
-    Mark,
-    Selection,
-    Cursor,
-}
-
 #[derive(Debug, Clone)]
 pub struct PrioritizedStyle {
     pub style: style::ContentStyle,
-    pub priority: Priority,
 }
 
 #[derive(Debug, Clone, Default)]

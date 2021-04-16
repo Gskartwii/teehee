@@ -204,7 +204,6 @@ impl HexView {
             style: style::ContentStyle::new()
                 .foreground(style::Color::White)
                 .background(style::Color::Black),
-            priority: Priority::Basic,
         }
     }
     fn active_selection_style(&self) -> PrioritizedStyle {
@@ -212,7 +211,6 @@ impl HexView {
             style: style::ContentStyle::new()
                 .foreground(style::Color::Black)
                 .background(style::Color::DarkYellow),
-            priority: Priority::Selection,
         }
     }
     fn inactive_selection_style(&self) -> PrioritizedStyle {
@@ -220,7 +218,6 @@ impl HexView {
             style: style::ContentStyle::new()
                 .foreground(style::Color::Black)
                 .background(style::Color::DarkGrey),
-            priority: Priority::Selection,
         }
     }
     fn active_caret_style(&self) -> PrioritizedStyle {
@@ -228,7 +225,6 @@ impl HexView {
             style: style::ContentStyle::new()
                 .foreground(style::Color::AnsiValue(16))
                 .background(style::Color::White),
-            priority: Priority::Cursor,
         }
     }
     fn inactive_caret_style(&self) -> PrioritizedStyle {
@@ -236,13 +232,11 @@ impl HexView {
             style: style::ContentStyle::new()
                 .foreground(style::Color::Black)
                 .background(style::Color::DarkGrey),
-            priority: Priority::Cursor,
         }
     }
     fn empty_caret_style(&self) -> PrioritizedStyle {
         PrioritizedStyle {
             style: style::ContentStyle::new().background(style::Color::Green),
-            priority: Priority::Cursor,
         }
     }
 
