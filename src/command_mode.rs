@@ -3,6 +3,7 @@ use super::keymap::*;
 use super::mode::*;
 use super::modes::normal::Normal;
 use super::modes::quitting;
+use super::view::view_options::{DirtyBytes, ViewOptions};
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use lazy_static::lazy_static;
 use maplit::hashmap;
@@ -41,22 +42,20 @@ fn default_maps() -> KeyMap<Action> {
 mod cmd {
     use super::*;
 
-    pub fn quit(buf: &mut Buffers, _: &str) -> ModeTransition {
+    pub fn quit(buf: &mut Buffers, options: &mut ViewOptions, _: &str) -> ModeTransition {
         if buf.iter().any(|x| x.dirty && x.path.is_some()) {
-            ModeTransition::new_mode_and_info(
-                Normal::new(),
-                "unsaved changes! Run :wq or :q! instead.".into(),
-            )
+            options.info = Some("unsaved changes! Run :wq or :q! instead.".into());
+            ModeTransition::new_mode(Normal::new())
         } else {
             ModeTransition::new_mode(quitting::Quitting {})
         }
     }
 
-    pub fn force_quit(_: &mut Buffers, _: &str) -> ModeTransition {
+    pub fn force_quit(_: &mut Buffers, _: &mut ViewOptions, _: &str) -> ModeTransition {
         ModeTransition::new_mode(quitting::Quitting {})
     }
 
-    pub fn write(buf: &mut Buffers, filename: &str) -> ModeTransition {
+    pub fn write(buf: &mut Buffers, options: &mut ViewOptions, filename: &str) -> ModeTransition {
         let path = if filename.is_empty() {
             buf.current().path.as_ref().map(|p| p.as_path())
         } else {
@@ -65,10 +64,8 @@ mod cmd {
 
         if let Some(path) = path {
             if let Err(e) = fs::write(&path, buf.current().data.slice_to_cow(..)) {
-                return ModeTransition::new_mode_and_info(
-                    Normal::new(),
-                    format!("write failed: {}", e),
-                );
+                options.info = Some(format!("write failed: {}", e));
+                return ModeTransition::new_mode(Normal::new());
             }
 
             let owned_path = path.to_owned();
@@ -77,18 +74,17 @@ mod cmd {
             buf_mut.update_path_if_missing(owned_path);
             ModeTransition::new_mode(Normal::new())
         } else {
-            ModeTransition::new_mode_and_info(Normal::new(), "buffer has no path".into())
+            options.info = Some("buffer has no path".into());
+            ModeTransition::new_mode(Normal::new())
         }
     }
 
-    pub fn write_all(buffers: &mut Buffers, _: &str) -> ModeTransition {
+    pub fn write_all(buffers: &mut Buffers, options: &mut ViewOptions, _: &str) -> ModeTransition {
         for buf in buffers.iter_mut() {
             if let Some(path) = buf.path.as_ref() {
                 if let Err(e) = fs::write(&path, buf.data.slice_to_cow(..)) {
-                    return ModeTransition::new_mode_and_info(
-                        Normal::new(),
-                        format!("write failed: {}", e),
-                    );
+                    options.info = Some(format!("write failed: {}", e));
+                    return ModeTransition::new_mode(Normal::new());
                 }
                 buf.dirty = false;
             }
@@ -96,14 +92,12 @@ mod cmd {
         ModeTransition::new_mode(Normal::new())
     }
 
-    pub fn write_quit(buffers: &mut Buffers, _: &str) -> ModeTransition {
+    pub fn write_quit(buffers: &mut Buffers, options: &mut ViewOptions, _: &str) -> ModeTransition {
         for buf in buffers.iter_mut() {
             if let Some(path) = buf.path.as_ref() {
                 if let Err(e) = fs::write(&path, buf.data.slice_to_cow(..)) {
-                    return ModeTransition::new_mode_and_info(
-                        Normal::new(),
-                        format!("write failed: {}", e),
-                    );
+                    options.info = Some(format!("write failed: {}", e));
+                    return ModeTransition::new_mode(Normal::new());
                 }
                 buf.dirty = false;
             }
@@ -111,32 +105,46 @@ mod cmd {
         ModeTransition::new_mode(quitting::Quitting {})
     }
 
-    pub fn edit(buffers: &mut Buffers, filename: &str) -> ModeTransition {
+    pub fn edit(
+        buffers: &mut Buffers,
+        options: &mut ViewOptions,
+        filename: &str,
+    ) -> ModeTransition {
         let result = buffers.switch_buffer(filename);
         if let Err(e) = result {
-            return ModeTransition::new_mode_and_info(Normal::new(), format!("{}", e));
+            options.info = Some(e.to_string());
+            return ModeTransition::new_mode(Normal::new());
         }
-        ModeTransition::new_mode_and_dirty(Normal::new(), DirtyBytes::ChangeLength)
+        options.make_dirty(DirtyBytes::ChangeLength);
+        ModeTransition::new_mode(Normal::new())
     }
 
-    pub fn delete_buffer(buffers: &mut Buffers, _: &str) -> ModeTransition {
+    pub fn delete_buffer(
+        buffers: &mut Buffers,
+        options: &mut ViewOptions,
+        _: &str,
+    ) -> ModeTransition {
         if buffers.current().dirty && buffers.current().path.is_some() {
-            return ModeTransition::new_mode_and_info(
-                Normal::new(),
-                "buffer is dirty, use :db! if you're sure".to_string(),
-            );
+            options.info = Some("buffer is dirty, use :db! if you're sure".to_string());
+            return ModeTransition::new_mode(Normal::new());
         }
         buffers.delete_current();
-        ModeTransition::new_mode_and_dirty(Normal::new(), DirtyBytes::ChangeLength)
+        options.make_dirty(DirtyBytes::ChangeLength);
+        ModeTransition::new_mode(Normal::new())
     }
 
-    pub fn force_delete_buffer(buffers: &mut Buffers, _: &str) -> ModeTransition {
+    pub fn force_delete_buffer(
+        buffers: &mut Buffers,
+        options: &mut ViewOptions,
+        _: &str,
+    ) -> ModeTransition {
         buffers.delete_current();
-        ModeTransition::new_mode_and_dirty(Normal::new(), DirtyBytes::ChangeLength)
+        options.make_dirty(DirtyBytes::ChangeLength);
+        ModeTransition::new_mode(Normal::new())
     }
 }
 
-type CommandHandler = fn(&mut Buffers, &str) -> ModeTransition;
+type CommandHandler = fn(&mut Buffers, &mut ViewOptions, &str) -> ModeTransition;
 
 macro_rules! make_commands {
     ($($string:tt => $cmd:ident,)*) => {
@@ -179,14 +187,15 @@ impl Command {
         }
     }
 
-    fn finish(&self, buffers: &mut Buffers) -> ModeTransition {
+    fn finish(&self, buffers: &mut Buffers, options: &mut ViewOptions) -> ModeTransition {
         let (name, rest) = self
             .command
             .split_at(self.command.find(' ').unwrap_or(self.command.len()));
         if let Some(handler) = DEFAULT_COMMANDS.get(name) {
-            handler(buffers, if rest.len() == 0 { rest } else { &rest[1..] })
+            handler(buffers, options, if rest.len() == 0 { rest } else { &rest[1..] })
         } else {
-            ModeTransition::new_mode_and_info(Normal::new(), format!("Unknown command {}", name))
+            options.info = Some(format!("Unknown command {}", name));
+            ModeTransition::new_mode(Normal::new())
         }
     }
 }
@@ -196,7 +205,12 @@ impl Mode for Command {
         "COMMAND".into()
     }
 
-    fn transition(&self, evt: &Event, buffers: &mut Buffers, _: usize) -> Option<ModeTransition> {
+    fn transition(
+        self,
+        evt: &Event,
+        buffers: &mut Buffers,
+        options: &mut ViewOptions,
+    ) -> ModeTransition {
         if let Some(action) = DEFAULT_MAPS.event_to_action(evt) {
             let mut cursor = self.cursor;
             let mut command = self.command.to_owned();
@@ -206,7 +220,7 @@ impl Mode for Command {
                     command.remove(cursor - 1);
                     cursor -= 1;
                 }
-                Action::RemoveLast => return Some(ModeTransition::None),
+                Action::RemoveLast => return ModeTransition::new_mode(self),
                 Action::RemoveThis => {
                     command.remove(cursor);
                 } // Don't move the cursor
@@ -218,25 +232,25 @@ impl Mode for Command {
                     cursor += 1;
                 }
                 Action::CursorRight => {}
-                Action::Cancel => return Some(ModeTransition::new_mode(Normal::new())),
-                Action::Finish => return Some(self.finish(buffers)),
+                Action::Cancel => return ModeTransition::new_mode(Normal::new()),
+                Action::Finish => return self.finish(buffers, options),
             }
-            Some(ModeTransition::new_mode(Command { command, cursor }))
+            ModeTransition::new_mode(Command { command, cursor })
         } else if let Event::Key(KeyEvent {
             code: KeyCode::Char(ch),
             modifiers,
         }) = evt
         {
             if !(*modifiers & !KeyModifiers::SHIFT).is_empty() {
-                return None;
+                return ModeTransition::not_handled(self);
             }
             let mut command = self.command.to_owned();
             let mut cursor = self.cursor;
             command.insert(cursor, *ch);
             cursor += 1;
-            Some(ModeTransition::new_mode(Command { command, cursor }))
+            ModeTransition::new_mode(Command { command, cursor })
         } else {
-            None
+            ModeTransition::not_handled(self)
         }
     }
     fn as_any(&self) -> &dyn std::any::Any {

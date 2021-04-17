@@ -289,7 +289,7 @@ impl Mode for Normal {
                     }
                     ModeTransition::new_mode(Normal::new())
                 }
-                Action::Undo => {
+                Action::Redo => {
                     match buffer.perform_redo() {
                         None => options.info = Some("nothing left to redo".to_owned()),
                         Some(dirty) => options.make_dirty(dirty),
