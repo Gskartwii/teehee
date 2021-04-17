@@ -8,7 +8,6 @@ use jetscii::ByteSubstring;
 use lazy_static::lazy_static;
 use regex::bytes::RegexBuilder;
 use std::borrow::Cow;
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ops::Range;
 
@@ -121,7 +120,7 @@ pub struct Search {
     pub cursor: usize,
     pub hex: bool,
     pub hex_half: Option<u8>,
-    pub next: RefCell<Option<Box<dyn SearchAcceptor>>>,
+    pub next: Box<dyn SearchAcceptor>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -160,7 +159,7 @@ lazy_static! {
 impl Search {
     pub fn new(next: impl SearchAcceptor, hex: bool) -> Search {
         Search {
-            next: RefCell::new(Some(Box::new(next))),
+            next: Box::new(next),
             hex,
             hex_half: None,
             cursor: 0,
@@ -172,9 +171,6 @@ impl Search {
 impl Mode for Search {
     fn name(&self) -> Cow<'static, str> {
         self.next
-            .borrow()
-            .as_ref()
-            .unwrap()
             .name()
             .to_owned()
             .into()
@@ -220,7 +216,7 @@ impl Mode for Search {
                 }
                 Action::Cancel => return ModeTransition::new_mode(Normal::new()),
                 Action::Finish => {
-                    return self.next.borrow().as_ref().unwrap().apply_search(
+                    return self.next.apply_search(
                         pattern,
                         buffers,
                         options,
@@ -232,8 +228,8 @@ impl Mode for Search {
                 cursor,
                 hex,
                 hex_half: None, // after any action that doesn't insert a hex half, the hex half should be reset
-                next: RefCell::new(self.next.replace(None)),
-            }) // The old state won't be valid after this
+                next: self.next,
+            })
         } else if let Event::Key(KeyEvent {
             code: KeyCode::Char(ch),
             modifiers,
@@ -265,8 +261,8 @@ impl Mode for Search {
                 cursor,
                 hex_half,
                 hex: self.hex,
-                next: RefCell::new(self.next.replace(None)),
-            }) // The old state won't be valid after this
+                next: self.next,
+            })
         } else {
             ModeTransition::not_handled(*self)
         }
