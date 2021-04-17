@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 
 use super::byte_rope::*;
 use super::history::History;
-use super::mode::*;
 use super::selection::*;
+use super::view::view_options::DirtyBytes;
 
 #[derive(Debug, PartialEq, Clone, Copy, Eq, Hash)]
 pub enum OverflowSelectionStyle {

@@ -11,6 +11,7 @@ use super::mode::*;
 use super::modes;
 use super::operations as ops;
 use super::selection::Direction;
+use super::view::view_options::{DirtyBytes, ViewOptions};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct Normal {
@@ -101,27 +102,27 @@ impl Mode for Normal {
     }
 
     fn transition(
-        &self,
+        self,
         event: &Event,
         buffers: &mut Buffers,
-        bytes_per_line: usize,
-    ) -> Option<ModeTransition> {
+        options: &mut ViewOptions,
+    ) -> ModeTransition {
         let buffer = buffers.current_mut();
         if let cmd_count::Transition::Update(new_state) = self.count_state.transition(event) {
-            Some(ModeTransition::new_mode(Normal {
+            ModeTransition::new_mode(Normal {
                 count_state: new_state,
-            }))
+            })
         } else if let Some(action) = DEFAULT_MAPS.event_to_action(event) {
-            Some(match action {
+            match action {
                 Action::JumpToMode => match self.count_state {
                     cmd_count::State::None => {
                         ModeTransition::new_mode(modes::jumpto::JumpTo { extend: false })
                     }
                     cmd_count::State::Some { count: offset, .. } => {
-                        ModeTransition::new_mode_and_dirty(
-                            Normal::new(),
+                        options.make_dirty(
                             buffer.map_selections(|region| vec![region.jump_to(offset)]),
-                        )
+                        );
+                        ModeTransition::new_mode(Normal::new())
                     }
                 },
                 Action::ExtendToMode => match self.count_state {
@@ -129,109 +130,94 @@ impl Mode for Normal {
                         ModeTransition::new_mode(modes::jumpto::JumpTo { extend: true })
                     }
                     cmd_count::State::Some { count: offset, .. } => {
-                        ModeTransition::new_mode_and_dirty(
-                            Normal::new(),
-                            buffer.map_selections(|region| vec![region.extend_to(offset)]),
-                        )
+                        options.make_dirty(buffer.map_selections(|region| vec![region.extend_to(offset)]));
+                        ModeTransition::new_mode(Normal::new())
                     }
                 },
                 Action::SplitMode => ModeTransition::new_mode(modes::split::Split::new()),
-                Action::Insert { hex } => ModeTransition::new_mode_and_dirty(
-                    modes::insert::Insert {
+                Action::Insert { hex } => {
+                    options.make_dirty(buffer.map_selections(|region| vec![region.to_backward()]));
+                    ModeTransition::new_mode(modes::insert::Insert {
                         hex,
                         before: true,
                         hex_half: None,
-                    },
-                    buffer.map_selections(|region| vec![region.to_backward()]),
-                ),
-                Action::Append { hex } => ModeTransition::new_mode_and_dirty(
-                    modes::insert::Insert {
+                    })
+                }
+                Action::Append { hex } => {
+                    let max_size = buffer.data.len();
+                    options.make_dirty(buffer.map_selections(|region| {
+                        vec![region.to_forward().simple_extend(
+                            Direction::Right,
+                            options.bytes_per_line,
+                            max_size,
+                            1,
+                        )]
+                    }));
+                    ModeTransition::new_mode(modes::insert::Insert {
                         hex,
                         before: false,
                         hex_half: None,
-                    },
-                    {
-                        let max_size = buffer.data.len();
-                        buffer.map_selections(|region| {
-                            vec![region.to_forward().simple_extend(
-                                Direction::Right,
-                                bytes_per_line,
-                                max_size,
-                                1,
-                            )]
-                        })
-                    },
-                ),
+                    })
+                }
                 Action::ReplaceMode { hex } => ModeTransition::new_mode(modes::replace::Replace {
                     hex,
                     hex_half: None,
                 }),
                 Action::Move(direction) => {
                     let max_bytes = buffer.data.len();
-                    ModeTransition::new_mode_and_dirty(
-                        Normal::new(),
-                        buffer.map_selections(|region| {
-                            vec![region.simple_move(
-                                direction,
-                                bytes_per_line,
-                                max_bytes,
-                                self.count_state.to_count(),
-                            )]
-                        }),
-                    )
+                    options.make_dirty(buffer.map_selections(|region| {
+                        vec![region.simple_move(
+                            direction,
+                            options.bytes_per_line,
+                            max_bytes,
+                            self.count_state.to_count(),
+                        )]
+                    }));
+                    ModeTransition::new_mode(Normal::new())
                 }
                 Action::Extend(direction) => {
                     let max_bytes = buffer.data.len();
-                    ModeTransition::new_mode_and_dirty(
-                        Normal::new(),
-                        buffer.map_selections(|region| {
-                            vec![region.simple_extend(
-                                direction,
-                                bytes_per_line,
-                                max_bytes,
-                                self.count_state.to_count(),
-                            )]
-                        }),
-                    )
+                    options.make_dirty(buffer.map_selections(|region| {
+                        vec![region.simple_extend(
+                            direction,
+                            options.bytes_per_line,
+                            max_bytes,
+                            self.count_state.to_count(),
+                        )]
+                    }));
+                    ModeTransition::new_mode(Normal::new())
                 }
-                Action::SwapCaret => ModeTransition::DirtyBytes(
-                    buffer.map_selections(|region| vec![region.swap_caret()]),
-                ),
-                Action::CollapseSelection => ModeTransition::DirtyBytes(
-                    buffer.map_selections(|region| vec![region.collapse()]),
-                ),
+                Action::SwapCaret => {
+                    buffer.map_selections(|region| vec![region.swap_caret()]);
+                    ModeTransition::new_mode(Normal::new())
+                }
+                Action::CollapseSelection => {
+                    buffer.map_selections(|region| vec![region.collapse()]);
+                    ModeTransition::new_mode(Normal::new())
+                }
                 Action::Delete { register } => {
                     buffer.yank_selections(register);
                     if !buffer.data.is_empty() {
                         let delta = ops::deletion(&buffer.data, &buffer.selection);
-                        ModeTransition::DirtyBytes(buffer.apply_delta(delta))
-                    } else {
-                        ModeTransition::None
+                        options.make_dirty(buffer.apply_delta(delta));
                     }
+                    ModeTransition::new_mode(Normal::new())
                 }
                 Action::Change { hex, register } => {
                     buffer.yank_selections(register);
                     if !buffer.data.is_empty() {
                         let delta = ops::deletion(&buffer.data, &buffer.selection);
-                        ModeTransition::new_mode_and_dirty(
-                            modes::insert::Insert {
-                                hex,
-                                before: true,
-                                hex_half: None,
-                            },
-                            buffer.apply_delta(delta),
-                        )
-                    } else {
-                        ModeTransition::new_mode(modes::insert::Insert {
-                            hex,
-                            before: true,
-                            hex_half: None,
-                        })
+                        options.make_dirty(buffer.apply_delta(delta));
                     }
+                    ModeTransition::new_mode(modes::insert::Insert {
+                        hex,
+                        before: true,
+                        hex_half: None,
+                    })
                 }
                 Action::Yank { register } => {
                     buffer.yank_selections(register);
-                    ModeTransition::None
+                    ModeTransition::new_mode(Normal::new())
                 }
                 Action::Paste { register, after } => {
                     let delta = ops::paste(
@@ -241,82 +227,78 @@ impl Mode for Normal {
                         after,
                         self.count_state.to_count(),
                     );
-                    ModeTransition::DirtyBytes(buffer.apply_delta(delta))
+                    options.make_dirty(buffer.apply_delta(delta));
+                    ModeTransition::new_mode(Normal::new())
                 }
                 // selection indexing in the UI starts at 1
                 // hence we check for count > 0 and offset by -1
-                Action::RemoveMain => match self.count_state {
-                    cmd_count::State::Some { count, .. } if count > 0 => {
-                        ModeTransition::new_mode_and_dirty(
-                            Normal::new(),
-                            buffer.remove_selection(count - 1),
-                        )
+                Action::RemoveMain => {
+                    match self.count_state {
+                        cmd_count::State::Some { count, .. } if count > 0 => {
+                            options.make_dirty(buffer.remove_selection(count - 1))
+                        }
+
+                        _ => options
+                            .make_dirty(buffer.remove_selection(buffer.selection.main_selection)),
                     }
-                    _ => ModeTransition::DirtyBytes(
-                        buffer.remove_selection(buffer.selection.main_selection),
-                    ),
-                },
-                Action::RetainMain => match self.count_state {
-                    cmd_count::State::Some { count, .. } if count > 0 => {
-                        ModeTransition::new_mode_and_dirty(
-                            Normal::new(),
-                            buffer.retain_selection(count - 1),
-                        )
+                    ModeTransition::new_mode(Normal::new())
+                }
+                Action::RetainMain => {
+                    match self.count_state {
+                        cmd_count::State::Some { count, .. } if count > 0 => {
+                            options.make_dirty(buffer.retain_selection(count - 1))
+                        }
+                        _ => options
+                            .make_dirty(buffer.retain_selection(buffer.selection.main_selection)),
                     }
-                    _ => ModeTransition::DirtyBytes(
-                        buffer.retain_selection(buffer.selection.main_selection),
-                    ),
-                },
+                    ModeTransition::new_mode(Normal::new())
+                }
 
                 // new_mode to clear count
-                Action::SelectNext => ModeTransition::new_mode_and_dirty(
-                    Normal::new(),
-                    buffer.select_next(self.count_state.to_count()),
-                ),
-                Action::SelectPrev => ModeTransition::new_mode_and_dirty(
-                    Normal::new(),
-                    buffer.select_prev(self.count_state.to_count()),
-                ),
+                Action::SelectNext => {
+                    options.make_dirty(buffer.select_next(self.count_state.to_count()));
+                    ModeTransition::new_mode(Normal::new())
+                }
+                Action::SelectPrev => {
+                    options.make_dirty(buffer.select_prev(self.count_state.to_count()));
+                    ModeTransition::new_mode(Normal::new())
+                }
                 Action::SelectAll => {
                     buffer.selection.select_all(buffer.data.len());
-                    ModeTransition::DirtyBytes(DirtyBytes::ChangeInPlace(vec![(0..buffer
-                        .data
-                        .len())
-                        .into()]))
+                    options.make_dirty(DirtyBytes::ChangeInPlace(vec![
+                        (0..buffer.data.len()).into()
+                    ]));
+                    ModeTransition::new_mode(Normal::new())
                 }
                 Action::CollapseMode { hex } => ModeTransition::new_mode(
                     modes::search::Search::new(modes::collapse::Collapse(), hex),
                 ),
-                Action::Measure => ModeTransition::new_mode_and_info(
-                    Normal::new(),
-                    format!(
+                Action::Measure => {
+                    options.info = Some(format!(
                         "{} = 0x{:x} bytes",
                         buffer.selection.main().len(),
                         buffer.selection.main().len()
-                    ),
-                ),
+                    ));
+                    ModeTransition::new_mode(Normal::new())
+                }
                 Action::CommandMode => ModeTransition::new_mode(modes::command::Command::new()),
-                Action::Undo => buffer.perform_undo().map_or_else(
-                    || {
-                        ModeTransition::new_mode_and_info(
-                            Normal::new(),
-                            "nothing left to undo".to_owned(),
-                        )
-                    },
-                    |dirty| ModeTransition::new_mode_and_dirty(Normal::new(), dirty),
-                ),
-                Action::Redo => buffer.perform_redo().map_or_else(
-                    || {
-                        ModeTransition::new_mode_and_info(
-                            Normal::new(),
-                            "nothing left to redo".to_owned(),
-                        )
-                    },
-                    |dirty| ModeTransition::new_mode_and_dirty(Normal::new(), dirty),
-                ),
-            })
+                Action::Undo => {
+                    match buffer.perform_undo() {
+                        None => options.info = Some("nothing left to undo".to_owned()),
+                        Some(dirty) => options.make_dirty(dirty),
+                    }
+                    ModeTransition::new_mode(Normal::new())
+                }
+                Action::Undo => {
+                    match buffer.perform_redo() {
+                        None => options.info = Some("nothing left to redo".to_owned()),
+                        Some(dirty) => options.make_dirty(dirty),
+                    }
+                    ModeTransition::new_mode(Normal::new())
+                }
+            }
         } else {
-            None
+            ModeTransition::not_handled(self)
         }
     }
     fn as_any(&self) -> &dyn std::any::Any {

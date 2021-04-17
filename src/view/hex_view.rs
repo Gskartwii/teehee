@@ -16,6 +16,7 @@ use xi_rope::Interval;
 
 use super::prompt::*;
 use super::style::*;
+use super::view_options::{DirtyBytes, ViewOptions};
 use crate::buffer::*;
 use crate::mode::*;
 use crate::modes;
@@ -42,36 +43,26 @@ impl fmt::Display for ByteAsciiRepr {
 
 pub struct HexView {
     buffers: Buffers,
-    size: (u16, u16),
-    bytes_per_line: usize,
-    start_offset: usize,
+    options: ViewOptions,
     last_visible_rows: Cell<usize>,
     last_visible_prompt_col: Cell<usize>,
     last_draw_time: time::Duration,
 
     mode: Box<dyn Mode>,
-    info: Option<String>,
 }
 
 impl HexView {
     pub fn with_buffers(buffers: Buffers) -> HexView {
         HexView {
             buffers,
-            bytes_per_line: 0x10,
-            start_offset: 0,
-            size: terminal::size().unwrap(),
+            options: ViewOptions::new(),
             last_visible_rows: Cell::new(0),
             last_visible_prompt_col: Cell::new(0),
 
             last_draw_time: Default::default(),
 
             mode: Box::new(modes::normal::Normal::new()),
-            info: None,
         }
-    }
-
-    pub fn set_bytes_per_line(&mut self, bpl: usize) {
-        self.bytes_per_line = bpl;
     }
 
     fn draw_hex_row(
@@ -118,12 +109,12 @@ impl HexView {
     }
 
     fn offset_to_row(&self, offset: usize) -> Option<u16> {
-        if offset < self.start_offset {
+        if offset < self.options.start_offset {
             return None;
         }
-        let normalized_offset = offset - self.start_offset;
-        let bytes_per_line = self.bytes_per_line;
-        let max_bytes = bytes_per_line * self.size.1 as usize;
+        let normalized_offset = offset - self.options.start_offset;
+        let bytes_per_line = self.options.bytes_per_line;
+        let max_bytes = bytes_per_line * self.options.size.1 as usize;
         if normalized_offset > max_bytes {
             return None;
         }
@@ -151,9 +142,9 @@ impl HexView {
         )?;
 
         let mut padding_length = if bytes.len() == 0 {
-            self.bytes_per_line * 3
+            self.options.bytes_per_line * 3
         } else {
-            (self.bytes_per_line - bytes.len()) % self.bytes_per_line * 3
+            (self.options.bytes_per_line - bytes.len()) % self.options.bytes_per_line * 3
         };
         if let Some(style_cmd) = &end_style {
             padding_length -= 2;
@@ -192,10 +183,10 @@ impl HexView {
     }
 
     fn visible_bytes(&self) -> Range<usize> {
-        self.start_offset
+        self.options.start_offset
             ..cmp::min(
                 self.buffers.current().data.len() + 1,
-                self.start_offset + (self.size.1 - 1) as usize * self.bytes_per_line,
+                self.options.start_offset + (self.options.size.1 - 1) as usize * self.options.bytes_per_line,
             )
     }
 
@@ -304,12 +295,12 @@ impl HexView {
                 }
             }
 
-            if i % self.bytes_per_line == 0 && mark_commands[normalized].start_style().is_none() {
+            if i % self.options.bytes_per_line == 0 && mark_commands[normalized].start_style().is_none() {
                 // line starts: restore applied style
                 mark_commands[normalized] = mark_commands[normalized]
                     .clone()
                     .with_start_style(command_stack.last().unwrap().clone());
-            } else if (i + 1) % self.bytes_per_line == 0 {
+            } else if (i + 1) % self.options.bytes_per_line == 0 {
                 // line ends: apply default style
                 mark_commands[normalized] = mark_commands[normalized]
                     .clone()
@@ -432,22 +423,22 @@ impl HexView {
 
     fn draw_statusline(&self, stdout: &mut impl Write) -> Result<()> {
         let line_length = self.calculate_powerline_length();
-        if let Some(info) = &self.info {
+        if let Some(info) = &self.options.info {
             queue!(
                 stdout,
-                cursor::MoveTo(0, self.size.1 - 1),
+                cursor::MoveTo(0, self.options.size.1 - 1),
                 terminal::Clear(terminal::ClearType::CurrentLine),
                 style::PrintStyledContent(
                     style::style(info)
                         .with(style::Color::White)
                         .on(style::Color::Blue)
                 ),
-                cursor::MoveTo(self.size.0 - line_length as u16, self.size.1),
+                cursor::MoveTo(self.options.size.0 - line_length as u16, self.options.size.1),
             )?;
         } else {
             queue!(
                 stdout,
-                cursor::MoveTo(self.size.0 - line_length as u16, self.size.1),
+                cursor::MoveTo(self.options.size.0 - line_length as u16, self.options.size.1),
                 terminal::Clear(terminal::ClearType::CurrentLine),
             )?;
         }
@@ -464,9 +455,9 @@ impl HexView {
         };
 
         if let Some(statusliner) = prompter {
-            queue!(stdout, cursor::MoveTo(0, self.size.1))?;
+            queue!(stdout, cursor::MoveTo(0, self.options.size.1))?;
             let prev_col = self.last_visible_prompt_col.get();
-            let new_col = statusliner.render_with_size(stdout, self.size.0 as usize, prev_col)?;
+            let new_col = statusliner.render_with_size(stdout, self.options.size.0 as usize, prev_col)?;
             self.last_visible_prompt_col.set(new_col);
         }
 
@@ -504,19 +495,19 @@ impl HexView {
         let max_bytes = visible_bytes_cow.len();
         let mark_commands = self.mark_commands(visible_bytes.clone());
 
-        for i in visible_bytes.step_by(self.bytes_per_line) {
+        for i in visible_bytes.step_by(self.options.bytes_per_line) {
             if !invalidated_rows.contains(&self.offset_to_row(i).unwrap()) {
                 continue;
             }
 
             let normalized_i = i - start_index;
-            let normalized_end = std::cmp::min(max_bytes, normalized_i + self.bytes_per_line);
+            let normalized_end = std::cmp::min(max_bytes, normalized_i + self.options.bytes_per_line);
             self.draw_row(
                 stdout,
                 &visible_bytes_cow[normalized_i..normalized_end],
                 i,
                 &mark_commands[normalized_i..normalized_end],
-                if i + self.bytes_per_line > self.buffers.current().data.len() {
+                if i + self.options.bytes_per_line > self.buffers.current().data.len() {
                     self.overflow_cursor_style()
                 } else {
                     None
@@ -548,15 +539,15 @@ impl HexView {
         let max_bytes = visible_bytes_cow.len();
         let mark_commands = self.mark_commands(visible_bytes.clone());
 
-        for i in visible_bytes.step_by(self.bytes_per_line) {
+        for i in visible_bytes.step_by(self.options.bytes_per_line) {
             let normalized_i = i - start_index;
-            let normalized_end = std::cmp::min(max_bytes, normalized_i + self.bytes_per_line);
+            let normalized_end = std::cmp::min(max_bytes, normalized_i + self.options.bytes_per_line);
             self.draw_row(
                 stdout,
                 &visible_bytes_cow[normalized_i..normalized_end],
                 i,
                 &mark_commands[normalized_i..normalized_end],
-                if i + self.bytes_per_line > self.buffers.current().data.len() {
+                if i + self.options.bytes_per_line > self.buffers.current().data.len() {
                     self.overflow_cursor_style()
                 } else {
                     None
@@ -565,7 +556,7 @@ impl HexView {
         }
 
         let new_full_rows =
-            (end_index - start_index + self.bytes_per_line - 1) / self.bytes_per_line;
+            (end_index - start_index + self.options.bytes_per_line - 1) / self.options.bytes_per_line;
         if new_full_rows != self.last_visible_rows.get() {
             self.last_visible_rows.set(new_full_rows);
         }
@@ -578,7 +569,7 @@ impl HexView {
     fn handle_event_default(&mut self, stdout: &mut impl Write, event: Event) -> Result<()> {
         match event {
             Event::Resize(x, y) => {
-                self.size = (x, y);
+                self.options.size = (x, y);
                 self.draw(stdout)?;
                 Ok(())
             }
@@ -587,9 +578,9 @@ impl HexView {
     }
 
     fn scroll_down(&mut self, stdout: &mut impl Write, line_count: usize) -> Result<()> {
-        self.start_offset += 0x10 * line_count;
+        self.options.start_offset += 0x10 * line_count;
 
-        if line_count > (self.size.1 - 1) as usize {
+        if line_count > (self.options.size.1 - 1) as usize {
             self.draw(stdout)?;
             Ok(())
         } else {
@@ -598,25 +589,25 @@ impl HexView {
                 terminal::ScrollUp(line_count as u16),
                 // important: first scroll, then clear the line
                 // I don't know why, but this prevents flashing on the statusline
-                cursor::MoveTo(0, self.size.1 - 2),
+                cursor::MoveTo(0, self.options.size.1 - 2),
                 terminal::Clear(terminal::ClearType::CurrentLine),
             )?;
             let invalidated_rows =
-                (self.size.1 - 1 - line_count as u16..=self.size.1 - 2).collect();
+                (self.options.size.1 - 1 - line_count as u16..=self.options.size.1 - 2).collect();
             self.draw_rows(stdout, &invalidated_rows) // -1 is statusline
         }
     }
     fn scroll_up(&mut self, stdout: &mut impl Write, line_count: usize) -> Result<()> {
-        self.start_offset -= 0x10 * line_count;
+        self.options.start_offset -= 0x10 * line_count;
 
-        if line_count > (self.size.1 - 1) as usize {
+        if line_count > (self.options.size.1 - 1) as usize {
             self.draw(stdout)?;
             Ok(())
         } else {
             queue!(
                 stdout,
                 terminal::ScrollDown(line_count as u16),
-                cursor::MoveTo(0, self.size.1 - 1),
+                cursor::MoveTo(0, self.options.size.1 - 1),
                 terminal::Clear(terminal::ClearType::CurrentLine),
             )?;
             let invalidated_rows = (0..line_count as u16).collect();
@@ -626,7 +617,7 @@ impl HexView {
 
     fn maybe_update_offset(&mut self, stdout: &mut impl Write) -> Result<()> {
         if self.buffers.current().data.is_empty() {
-            self.start_offset = 0;
+            self.options.start_offset = 0;
             return Ok(());
         }
 
@@ -641,11 +632,11 @@ impl HexView {
         };
         if delta < 0 {
             let line_delta =
-                (delta - self.bytes_per_line as isize + 1) / self.bytes_per_line as isize;
+                (delta - self.options.bytes_per_line as isize + 1) / self.options.bytes_per_line as isize;
             self.scroll_up(stdout, line_delta.abs() as usize)
         } else {
             let line_delta =
-                (delta + self.bytes_per_line as isize - 1) / self.bytes_per_line as isize;
+                (delta + self.options.bytes_per_line as isize - 1) / self.options.bytes_per_line as isize;
             self.scroll_down(stdout, line_delta as usize)
         }
     }
@@ -654,11 +645,11 @@ impl HexView {
         let main_cursor_offset = self.buffers.current().selection.main_cursor_offset();
         let visible_bytes = self.visible_bytes();
         if main_cursor_offset < visible_bytes.start {
-            self.start_offset = main_cursor_offset - main_cursor_offset % self.bytes_per_line;
+            self.options.start_offset = main_cursor_offset - main_cursor_offset % self.options.bytes_per_line;
         } else if main_cursor_offset >= visible_bytes.end {
-            let bytes_per_screen = (self.size.1 as usize - 1) * self.bytes_per_line; // -1 for statusline
-            self.start_offset = (main_cursor_offset - main_cursor_offset % self.bytes_per_line
-                + self.bytes_per_line)
+            let bytes_per_screen = (self.options.size.1 as usize - 1) * self.options.bytes_per_line; // -1 for statusline
+            self.options.start_offset = (main_cursor_offset - main_cursor_offset % self.options.bytes_per_line
+                + self.options.bytes_per_line)
                 .saturating_sub(bytes_per_screen);
         }
 
@@ -669,7 +660,7 @@ impl HexView {
     fn transition_dirty_bytes(
         &mut self,
         stdout: &mut impl Write,
-        dirty_bytes: DirtyBytes,
+        dirty_bytes: &DirtyBytes,
     ) -> Result<()> {
         match dirty_bytes {
             DirtyBytes::ChangeInPlace(intervals) => {
@@ -695,27 +686,12 @@ impl HexView {
         }
     }
 
-    fn transition(&mut self, stdout: &mut impl Write, transition: ModeTransition) -> Result<()> {
-        self.info = None;
-        match transition {
-            ModeTransition::None => Ok(()),
-            ModeTransition::DirtyBytes(dirty_bytes) => {
-                self.transition_dirty_bytes(stdout, dirty_bytes)
-            }
-            ModeTransition::NewMode(mode) => {
-                self.mode = mode;
-                Ok(())
-            }
-            ModeTransition::ModeAndDirtyBytes(mode, dirty_bytes) => {
-                self.mode = mode;
-                self.transition_dirty_bytes(stdout, dirty_bytes)
-            }
-            ModeTransition::ModeAndInfo(mode, info) => {
-                self.mode = mode;
-                self.info = Some(info);
-                Ok(())
-            }
+    fn transition(&mut self, stdout: &mut impl Write) -> Result<()> {
+        if let Some(dirty_bytes) = &self.options.dirty {
+            self.transition_dirty_bytes(stdout, &dirty_bytes)?;
+            self.options.dirty = None;
         }
+        Ok(())
     }
 
     pub fn run_event_loop(mut self, stdout: &mut impl Write) -> Result<()> {
@@ -730,11 +706,14 @@ impl HexView {
                 break;
             }
             let evt = event::read()?;
-            let transition = self
+            self.options.info = None;
+
+            let ModeTransition{next_mode, handled} = self
                 .mode
-                .transition(&evt, &mut self.buffers, self.bytes_per_line);
-            if let Some(transition) = transition {
-                self.transition(stdout, transition)?;
+                .transition(&evt, &mut self.buffers, &mut self.options);
+            self.mode = next_mode;
+            if handled {
+                self.transition(stdout)?;
             } else {
                 self.handle_event_default(stdout, evt)?;
             }
