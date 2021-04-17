@@ -44,7 +44,7 @@ impl Mode for Replace {
     }
 
     fn transition(
-        self,
+        self: Box<Self>,
         evt: &Event,
         buffers: &mut Buffers,
         options: &mut ViewOptions,
@@ -96,7 +96,7 @@ impl Mode for Replace {
         } else if let Event::Key(_) = evt {
             ModeTransition::new_mode(Normal::new())
         } else {
-            ModeTransition::not_handled(self)
+            ModeTransition::not_handled(*self)
         }
     }
     fn as_any(&self) -> &dyn std::any::Any {

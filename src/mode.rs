@@ -9,7 +9,7 @@ pub trait Mode: 'static {
     // TODO: Maybe this should be just String instead.
     fn name(&self) -> Cow<'static, str>;
     fn transition(
-        self,
+        self: Box<Self>,
         event: &Event,
         buffers: &mut Buffers,
         options: &mut ViewOptions,
@@ -25,8 +25,8 @@ pub trait Mode: 'static {
 }
 
 pub struct ModeTransition {
-    next_mode: Box<dyn Mode>,
-    handled: bool,
+    pub next_mode: Box<dyn Mode>,
+    pub handled: bool,
 }
 
 impl ModeTransition {

@@ -206,7 +206,7 @@ impl Mode for Command {
     }
 
     fn transition(
-        self,
+        self: Box<Self>,
         evt: &Event,
         buffers: &mut Buffers,
         options: &mut ViewOptions,
@@ -220,7 +220,7 @@ impl Mode for Command {
                     command.remove(cursor - 1);
                     cursor -= 1;
                 }
-                Action::RemoveLast => return ModeTransition::new_mode(self),
+                Action::RemoveLast => return ModeTransition::new_mode(*self),
                 Action::RemoveThis => {
                     command.remove(cursor);
                 } // Don't move the cursor
@@ -242,7 +242,7 @@ impl Mode for Command {
         }) = evt
         {
             if !(*modifiers & !KeyModifiers::SHIFT).is_empty() {
-                return ModeTransition::not_handled(self);
+                return ModeTransition::not_handled(*self);
             }
             let mut command = self.command.to_owned();
             let mut cursor = self.cursor;
@@ -250,7 +250,7 @@ impl Mode for Command {
             cursor += 1;
             ModeTransition::new_mode(Command { command, cursor })
         } else {
-            ModeTransition::not_handled(self)
+            ModeTransition::not_handled(*self)
         }
     }
     fn as_any(&self) -> &dyn std::any::Any {

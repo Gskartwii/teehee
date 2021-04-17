@@ -51,8 +51,8 @@ impl Mode for Collapse {
     fn name(&self) -> Cow<'static, str> {
         "COLLAPSE".into()
     }
-    fn transition(self, _: &Event, _: &mut Buffers, _: &mut ViewOptions) -> ModeTransition {
-        ModeTransition::not_handled(self)
+    fn transition(self: Box<Self>, _: &Event, _: &mut Buffers, _: &mut ViewOptions) -> ModeTransition {
+        ModeTransition::not_handled(*self)
     }
     fn as_any(&self) -> &dyn std::any::Any {
         self

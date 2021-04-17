@@ -105,7 +105,7 @@ impl Mode for Split {
     }
 
     fn transition(
-        self,
+        self: Box<Self>,
         evt: &Event,
         buffers: &mut Buffers,
         options: &mut ViewOptions,
@@ -139,12 +139,12 @@ impl Mode for Split {
                     buffers,
                     options,
                 ),
-                Action::Search { hex } => ModeTransition::new_mode(Search::new(self, hex)),
+                Action::Search { hex } => ModeTransition::new_mode(Search::new(*self, hex)),
             }
         } else if let Event::Key(_) = evt {
             ModeTransition::new_mode(Normal::new())
         } else {
-            ModeTransition::not_handled(self)
+            ModeTransition::not_handled(*self)
         }
     }
     fn as_any(&self) -> &dyn std::any::Any {

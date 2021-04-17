@@ -181,7 +181,7 @@ impl Mode for Search {
     }
 
     fn transition(
-        self,
+        self: Box<Self>,
         evt: &Event,
         buffers: &mut Buffers,
         options: &mut ViewOptions,
@@ -203,7 +203,7 @@ impl Mode for Search {
                     pattern.remove(cursor - 1);
                     cursor -= 1;
                 }
-                Action::RemoveLast => return ModeTransition::not_handled(self),
+                Action::RemoveLast => return ModeTransition::not_handled(*self),
                 Action::RemoveThis => {
                     pattern.remove(cursor);
                 } // Don't move the cursor
@@ -240,7 +240,7 @@ impl Mode for Search {
         }) = evt
         {
             if !modifiers.is_empty() {
-                return ModeTransition::not_handled(self);
+                return ModeTransition::not_handled(*self);
             }
             let mut pattern = self.pattern.to_owned();
             let mut cursor = self.cursor;
@@ -249,7 +249,7 @@ impl Mode for Search {
                 cursor = pattern.insert_literal(cursor, *ch as u8);
             } else {
                 if !ch.is_ascii_hexdigit() {
-                    return ModeTransition::not_handled(self);
+                    return ModeTransition::not_handled(*self);
                 }
                 let hex_digit = ch.to_digit(16).unwrap() as u8;
                 if let Some(half) = hex_half {
@@ -268,7 +268,7 @@ impl Mode for Search {
                 next: RefCell::new(self.next.replace(None)),
             }) // The old state won't be valid after this
         } else {
-            ModeTransition::not_handled(self)
+            ModeTransition::not_handled(*self)
         }
     }
     fn as_any(&self) -> &dyn std::any::Any {

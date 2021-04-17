@@ -32,7 +32,7 @@ mod modes {
                 false
             }
             fn transition(
-                self,
+                self: Box<Self>,
                 _: &crossterm::event::Event,
                 _: &mut crate::buffer::Buffers,
                 _: &mut crate::view::view_options::ViewOptions,

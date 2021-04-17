@@ -102,7 +102,7 @@ impl Mode for Normal {
     }
 
     fn transition(
-        self,
+        self: Box<Self>,
         event: &Event,
         buffers: &mut Buffers,
         options: &mut ViewOptions,
@@ -298,7 +298,7 @@ impl Mode for Normal {
                 }
             }
         } else {
-            ModeTransition::not_handled(self)
+            ModeTransition::not_handled(*self)
         }
     }
     fn as_any(&self) -> &dyn std::any::Any {

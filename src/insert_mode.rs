@@ -109,7 +109,7 @@ impl Mode for Insert {
         self.hex_half.is_some()
     }
     fn transition(
-        self,
+        self: Box<Self>,
         evt: &Event,
         buffers: &mut Buffers,
         options: &mut ViewOptions,
@@ -123,7 +123,7 @@ impl Mode for Insert {
                     hex_half: None,
                 }
             } else {
-                self
+                *self
             };
             match action {
                 Action::Exit => {
@@ -143,7 +143,7 @@ impl Mode for Insert {
                 }),
                 Action::RemoveLast | Action::RemoveThis if self.hex_half.is_some() => {
                     if buffer.data.is_empty() {
-                        return ModeTransition::new_mode(self);
+                        return ModeTransition::new_mode(*self);
                     }
                     let delta = ops::delete_cursor(&buffer.data, &buffer.selection);
                     options.make_dirty(buffer.apply_incomplete_delta(delta));
@@ -151,19 +151,19 @@ impl Mode for Insert {
                 }
                 Action::RemoveLast => {
                     if buffer.data.is_empty() {
-                        return ModeTransition::new_mode(self);
+                        return ModeTransition::new_mode(*self);
                     }
                     let delta = ops::backspace(&buffer.data, &buffer.selection);
                     options.make_dirty(buffer.apply_incomplete_delta(delta));
-                    ModeTransition::new_mode(self)
+                    ModeTransition::new_mode(*self)
                 }
                 Action::RemoveThis => {
                     if buffer.data.is_empty() {
-                        return ModeTransition::new_mode(self);
+                        return ModeTransition::new_mode(*self);
                     }
                     let delta = ops::delete_cursor(&buffer.data, &buffer.selection);
                     options.make_dirty(buffer.apply_incomplete_delta(delta));
-                    ModeTransition::new_mode(self)
+                    ModeTransition::new_mode(*self)
                 }
             }
         } else if let Event::Key(KeyEvent {
@@ -172,16 +172,16 @@ impl Mode for Insert {
         }) = evt
         {
             if !(*modifiers & !KeyModifiers::SHIFT).is_empty() {
-                return ModeTransition::not_handled(self);
+                return ModeTransition::not_handled(*self);
             }
 
             if self.hex {
-                transition_hex_insertion(self, *key, buffer, options, self.before, self.hex_half)
+                transition_hex_insertion(*self, *key, buffer, options, self.before, self.hex_half)
             } else {
-                transition_ascii_insertion(self, *key, buffer, options)
+                transition_ascii_insertion(*self, *key, buffer, options)
             }
         } else {
-            ModeTransition::not_handled(self)
+            ModeTransition::not_handled(*self)
         }
     }
     fn as_any(&self) -> &dyn std::any::Any {
