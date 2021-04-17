@@ -68,13 +68,17 @@ impl Pattern {
                     let mut matched_ranges = vec![];
                     let byte_substring = ByteSubstring::new(&basic_subslice);
 
+                    let data = buffer.data.slice_to_cow(base..=x.max());
+                    let mut slice_base = 0;
+
                     while let Some(start) =
-                        byte_substring.find(&buffer.data.slice_to_cow(base..=x.max()))
+                        byte_substring.find(&data[slice_base..])
                     {
                         let match_abs_start = base + start;
                         matched_ranges
                             .push(match_abs_start..match_abs_start + basic_subslice.len());
                         base = match_abs_start + basic_subslice.len();
+                        slice_base = slice_base + start + basic_subslice.len();
                     }
                     matched_ranges
                 })
