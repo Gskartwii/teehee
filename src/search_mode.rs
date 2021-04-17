@@ -2,6 +2,7 @@ use super::buffer::*;
 use super::keymap::*;
 use super::mode::*;
 use super::modes::normal::Normal;
+use super::view::view_options::ViewOptions;
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use jetscii::ByteSubstring;
 use lazy_static::lazy_static;
@@ -111,7 +112,7 @@ pub trait SearchAcceptor: Mode {
         &self,
         pattern: Pattern,
         buffers: &mut Buffers,
-        bytes_per_line: usize,
+        options: &mut ViewOptions,
     ) -> ModeTransition;
 }
 
@@ -180,11 +181,11 @@ impl Mode for Search {
     }
 
     fn transition(
-        &self,
+        self,
         evt: &Event,
         buffers: &mut Buffers,
-        bytes_per_line: usize,
-    ) -> Option<ModeTransition> {
+        options: &mut ViewOptions,
+    ) -> ModeTransition {
         if let Some(action) = DEFAULT_MAPS.event_to_action(evt) {
             let mut cursor = self.cursor;
             let mut pattern = self.pattern.to_owned();
@@ -202,7 +203,7 @@ impl Mode for Search {
                     pattern.remove(cursor - 1);
                     cursor -= 1;
                 }
-                Action::RemoveLast => return Some(ModeTransition::None),
+                Action::RemoveLast => return ModeTransition::not_handled(self),
                 Action::RemoveThis => {
                     pattern.remove(cursor);
                 } // Don't move the cursor
@@ -217,29 +218,29 @@ impl Mode for Search {
                 Action::SwitchInputMode => {
                     hex = !hex;
                 }
-                Action::Cancel => return Some(ModeTransition::new_mode(Normal::new())),
+                Action::Cancel => return ModeTransition::new_mode(Normal::new()),
                 Action::Finish => {
-                    return Some(self.next.borrow().as_ref().unwrap().apply_search(
+                    return self.next.borrow().as_ref().unwrap().apply_search(
                         pattern,
                         buffers,
-                        bytes_per_line,
-                    ))
+                        options,
+                    )
                 }
             }
-            Some(ModeTransition::new_mode(Search {
+            ModeTransition::new_mode(Search {
                 pattern,
                 cursor,
                 hex,
                 hex_half: None, // after any action that doesn't insert a hex half, the hex half should be reset
                 next: RefCell::new(self.next.replace(None)),
-            })) // The old state won't be valid after this
+            }) // The old state won't be valid after this
         } else if let Event::Key(KeyEvent {
             code: KeyCode::Char(ch),
             modifiers,
         }) = evt
         {
             if !modifiers.is_empty() {
-                return None;
+                return ModeTransition::not_handled(self);
             }
             let mut pattern = self.pattern.to_owned();
             let mut cursor = self.cursor;
@@ -248,7 +249,7 @@ impl Mode for Search {
                 cursor = pattern.insert_literal(cursor, *ch as u8);
             } else {
                 if !ch.is_ascii_hexdigit() {
-                    return None;
+                    return ModeTransition::not_handled(self);
                 }
                 let hex_digit = ch.to_digit(16).unwrap() as u8;
                 if let Some(half) = hex_half {
@@ -259,15 +260,15 @@ impl Mode for Search {
                     hex_half = Some(hex_digit << 4);
                 }
             }
-            Some(ModeTransition::new_mode(Search {
+            ModeTransition::new_mode(Search {
                 pattern,
                 cursor,
                 hex_half,
                 hex: self.hex,
                 next: RefCell::new(self.next.replace(None)),
-            })) // The old state won't be valid after this
+            }) // The old state won't be valid after this
         } else {
-            None
+            ModeTransition::not_handled(self)
         }
     }
     fn as_any(&self) -> &dyn std::any::Any {

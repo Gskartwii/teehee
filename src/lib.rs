@@ -32,11 +32,11 @@ mod modes {
                 false
             }
             fn transition(
-                &self,
+                self,
                 _: &crossterm::event::Event,
                 _: &mut crate::buffer::Buffers,
-                _: usize,
-            ) -> Option<crate::mode::ModeTransition> {
+                _: &mut crate::view::view_options::ViewOptions,
+            ) -> crate::mode::ModeTransition {
                 unreachable!();
             }
             fn as_any(&self) -> &dyn std::any::Any {

@@ -9,6 +9,7 @@ use super::mode::*;
 use super::modes::normal::Normal;
 use super::modes::search::{Pattern, PatternPiece, Search, SearchAcceptor};
 use super::selection::*;
+use super::view::view_options::ViewOptions;
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use lazy_static::lazy_static;
@@ -45,7 +46,12 @@ lazy_static! {
 }
 
 impl SearchAcceptor for Split {
-    fn apply_search(&self, pattern: Pattern, buffers: &mut Buffers, _: usize) -> ModeTransition {
+    fn apply_search(
+        &self,
+        pattern: Pattern,
+        buffers: &mut Buffers,
+        options: &mut ViewOptions,
+    ) -> ModeTransition {
         let buffer = buffers.current_mut();
         if pattern.pieces.is_empty() {
             return ModeTransition::new_mode(Normal::new());
@@ -64,34 +70,32 @@ impl SearchAcceptor for Split {
 
         let mut remaining_matched_ranges = &matched_ranges[..];
 
-        ModeTransition::new_mode_and_dirty(
-            Normal::new(),
-            buffer.map_selections(|mut base_region| {
-                let mut out = vec![];
-                let mut remaining = true;
+        options.make_dirty(buffer.map_selections(|mut base_region| {
+            let mut out = vec![];
+            let mut remaining = true;
 
-                for range in &remaining_matched_ranges[0] {
-                    let (left_region, right_region) =
-                        base_region.split_at_region(range.start, range.end - 1);
-                    if let Some(left) = left_region {
-                        out.push(left);
-                    }
-                    base_region = if let Some(right) = right_region {
-                        right
-                    } else {
-                        remaining = false;
-                        break;
-                    }
+            for range in &remaining_matched_ranges[0] {
+                let (left_region, right_region) =
+                    base_region.split_at_region(range.start, range.end - 1);
+                if let Some(left) = left_region {
+                    out.push(left);
                 }
-                remaining_matched_ranges = &remaining_matched_ranges[1..];
-
-                if remaining {
-                    out.push(base_region);
+                base_region = if let Some(right) = right_region {
+                    right
+                } else {
+                    remaining = false;
+                    break;
                 }
+            }
+            remaining_matched_ranges = &remaining_matched_ranges[1..];
 
-                out
-            }),
-        )
+            if remaining {
+                out.push(base_region);
+            }
+
+            out
+        }));
+        ModeTransition::new_mode(Normal::new())
     }
 }
 
@@ -101,22 +105,21 @@ impl Mode for Split {
     }
 
     fn transition(
-        &self,
+        self,
         evt: &Event,
         buffers: &mut Buffers,
-        bytes_per_line: usize,
-    ) -> Option<ModeTransition> {
+        options: &mut ViewOptions,
+    ) -> ModeTransition {
         let buffer = buffers.current_mut();
         if let cmd_count::Transition::Update(new_state) = self.count_state.transition(evt) {
-            Some(ModeTransition::new_mode(Split {
+            ModeTransition::new_mode(Split {
                 count_state: new_state,
-            }))
+            })
         } else if let Some(action) = DEFAULT_MAPS.event_to_action(evt) {
             let count = self.count_state.to_count();
-            Some(match action {
-                Action::Width(width) => ModeTransition::new_mode_and_dirty(
-                    Normal::new(),
-                    buffer.map_selections(|region| {
+            match action {
+                Action::Width(width) => {
+                    options.make_dirty(buffer.map_selections(|region| {
                         (region.min()..=region.max())
                             .step_by(width * count)
                             .map(|pos| {
@@ -124,8 +127,9 @@ impl Mode for Split {
                                     .with_direction(region.backward())
                             })
                             .collect()
-                    }),
-                ),
+                    }));
+                    ModeTransition::new_mode(Normal::new())
+                }
                 Action::Null => self.apply_search(
                     Pattern {
                         pieces: std::iter::repeat(PatternPiece::Literal(0u8))
@@ -133,14 +137,14 @@ impl Mode for Split {
                             .collect(),
                     },
                     buffers,
-                    bytes_per_line,
+                    options,
                 ),
-                Action::Search { hex } => ModeTransition::new_mode(Search::new(*self, hex)),
-            })
+                Action::Search { hex } => ModeTransition::new_mode(Search::new(self, hex)),
+            }
         } else if let Event::Key(_) = evt {
-            Some(ModeTransition::new_mode(Normal::new()))
+            ModeTransition::new_mode(Normal::new())
         } else {
-            None
+            ModeTransition::not_handled(self)
         }
     }
     fn as_any(&self) -> &dyn std::any::Any {

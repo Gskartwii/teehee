@@ -660,7 +660,7 @@ impl HexView {
     fn transition_dirty_bytes(
         &mut self,
         stdout: &mut impl Write,
-        dirty_bytes: &DirtyBytes,
+        dirty_bytes: DirtyBytes,
     ) -> Result<()> {
         match dirty_bytes {
             DirtyBytes::ChangeInPlace(intervals) => {
@@ -677,7 +677,7 @@ impl HexView {
                             intersection.start..intersection.end
                         }
                     })
-                    .map(|byte| ((byte - self.start_offset) / self.bytes_per_line) as u16)
+                    .map(|byte| ((byte - self.options.start_offset) / self.options.bytes_per_line) as u16)
                     .collect();
 
                 self.draw_rows(stdout, &invalidated_rows)
@@ -687,9 +687,8 @@ impl HexView {
     }
 
     fn transition(&mut self, stdout: &mut impl Write) -> Result<()> {
-        if let Some(dirty_bytes) = &self.options.dirty {
-            self.transition_dirty_bytes(stdout, &dirty_bytes)?;
-            self.options.dirty = None;
+        if let Some(dirty_bytes) = self.options.dirty.take() {
+            self.transition_dirty_bytes(stdout, dirty_bytes)?;
         }
         Ok(())
     }

@@ -6,6 +6,7 @@ use super::keymap::*;
 use super::mode::*;
 use super::modes::normal::Normal;
 use super::operations as ops;
+use super::view::view_options::ViewOptions;
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use lazy_static::lazy_static;
@@ -42,7 +43,12 @@ impl Mode for Replace {
         }
     }
 
-    fn transition(&self, evt: &Event, buffers: &mut Buffers, _: usize) -> Option<ModeTransition> {
+    fn transition(
+        self,
+        evt: &Event,
+        buffers: &mut Buffers,
+        options: &mut ViewOptions,
+    ) -> ModeTransition {
         let buffer = buffers.current_mut();
         if let Event::Key(KeyEvent {
             code: KeyCode::Char(ch),
@@ -53,50 +59,44 @@ impl Mode for Replace {
                 return match action {
                     Action::Null => {
                         let delta = ops::replace(&buffer.data, &buffer.selection, 0);
-                        Some(ModeTransition::new_mode_and_dirty(
-                            Normal::new(),
-                            buffer.apply_delta(delta),
-                        ))
+                        options.make_dirty(buffer.apply_delta(delta));
+                        ModeTransition::new_mode(Normal::new())
                     }
                 };
             }
 
             if !(*modifiers & !KeyModifiers::SHIFT).is_empty() {
-                return Some(ModeTransition::new_mode(Normal::new()));
+                return ModeTransition::new_mode(Normal::new());
             }
 
             if !self.hex {
                 let delta = ops::replace(&buffer.data, &buffer.selection, *ch as u8); // lossy!
-                Some(ModeTransition::new_mode_and_dirty(
-                    Normal::new(),
-                    buffer.apply_delta(delta),
-                ))
+                options.make_dirty(buffer.apply_delta(delta));
+                ModeTransition::new_mode(Normal::new())
             } else if self.hex_half.is_none() {
                 if !ch.is_ascii_hexdigit() {
-                    return Some(ModeTransition::new_mode(Normal::new()));
+                    return ModeTransition::new_mode(Normal::new());
                 }
 
                 let replacing_ch = (ch.to_digit(16).unwrap() as u8) << 4;
-                Some(ModeTransition::new_mode(Replace {
+                ModeTransition::new_mode(Replace {
                     hex: self.hex,
                     hex_half: Some(replacing_ch),
-                }))
+                })
             } else {
                 if !ch.is_ascii_hexdigit() {
-                    return Some(ModeTransition::new_mode(Normal::new()));
+                    return ModeTransition::new_mode(Normal::new());
                 }
 
                 let replacing_ch = (ch.to_digit(16).unwrap() as u8) | self.hex_half.unwrap();
                 let delta = ops::replace(&buffer.data, &buffer.selection, replacing_ch); // lossy!
-                Some(ModeTransition::new_mode_and_dirty(
-                    Normal::new(),
-                    buffer.apply_delta(delta),
-                ))
+                options.make_dirty(buffer.apply_delta(delta));
+                ModeTransition::new_mode(Normal::new())
             }
         } else if let Event::Key(_) = evt {
-            Some(ModeTransition::new_mode(Normal::new()))
+            ModeTransition::new_mode(Normal::new())
         } else {
-            None
+            ModeTransition::not_handled(self)
         }
     }
     fn as_any(&self) -> &dyn std::any::Any {

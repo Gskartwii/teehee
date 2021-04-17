@@ -6,6 +6,7 @@ use super::keymap::*;
 use super::mode::*;
 use super::modes::normal::Normal;
 use super::selection::*;
+use super::view::view_options::ViewOptions;
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 
@@ -41,30 +42,28 @@ impl Mode for JumpTo {
     }
 
     fn transition(
-        &self,
+        self,
         evt: &Event,
         buffers: &mut Buffers,
-        bytes_per_line: usize,
-    ) -> Option<ModeTransition> {
+        options: &mut ViewOptions,
+    ) -> ModeTransition {
         let buffer = buffers.current_mut();
         if let Some(direction) = DEFAULT_MAPS.event_to_action(evt) {
             let max_bytes = buffer.data.len();
-            Some(ModeTransition::new_mode_and_dirty(
-                Normal::new(),
-                if self.extend {
-                    buffer.map_selections(|region| {
-                        vec![region.extend_to_boundary(direction, bytes_per_line, max_bytes)]
-                    })
-                } else {
-                    buffer.map_selections(|region| {
-                        vec![region.jump_to_boundary(direction, bytes_per_line, max_bytes)]
-                    })
-                },
-            ))
+            if self.extend {
+                options.make_dirty(buffer.map_selections(|region| {
+                    vec![region.extend_to_boundary(direction, options.bytes_per_line, max_bytes)]
+                }));
+            } else {
+                options.make_dirty(buffer.map_selections(|region| {
+                    vec![region.jump_to_boundary(direction, options.bytes_per_line, max_bytes)]
+                }));
+            }
+            ModeTransition::new_mode(Normal::new())
         } else if let Event::Key(_) = evt {
-            Some(ModeTransition::new_mode(Normal::new()))
+            ModeTransition::new_mode(Normal::new())
         } else {
-            None
+            ModeTransition::not_handled(self)
         }
     }
     fn as_any(&self) -> &dyn std::any::Any {
