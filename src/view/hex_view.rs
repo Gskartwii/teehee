@@ -140,10 +140,6 @@ impl HexView {
         let row_num = self.offset_to_row(offset).unwrap();
 
         queue!(stdout, cursor::MoveTo(0, row_num))?;
-        queue!(
-            stdout,
-            style::Print(" ".to_string()), // Padding
-        )?;
         self.draw_hex_row(
             stdout,
             bytes.iter().copied().zip(mark_commands.iter().cloned()),
