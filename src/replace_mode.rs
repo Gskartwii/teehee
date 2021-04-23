@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use super::buffer::*;
 use super::keymap::*;
 use super::mode::*;
-use super::modes::normal::Normal;
 use super::operations as ops;
 use super::view::view_options::ViewOptions;
 
@@ -60,22 +59,22 @@ impl Mode for Replace {
                     Action::Null => {
                         let delta = ops::replace(&buffer.data, &buffer.selection, 0);
                         options.make_dirty(buffer.apply_delta(delta));
-                        ModeTransition::new_mode(Normal::new())
+                        ModeTransition::pop()
                     }
                 };
             }
 
             if !(*modifiers & !KeyModifiers::SHIFT).is_empty() {
-                return ModeTransition::new_mode(Normal::new());
+                return ModeTransition::pop()
             }
 
             if !self.hex {
                 let delta = ops::replace(&buffer.data, &buffer.selection, *ch as u8); // lossy!
                 options.make_dirty(buffer.apply_delta(delta));
-                ModeTransition::new_mode(Normal::new())
+                ModeTransition::pop()
             } else if self.hex_half.is_none() {
                 if !ch.is_ascii_hexdigit() {
-                    return ModeTransition::new_mode(Normal::new());
+                    return ModeTransition::pop()
                 }
 
                 let replacing_ch = (ch.to_digit(16).unwrap() as u8) << 4;
@@ -85,16 +84,16 @@ impl Mode for Replace {
                 })
             } else {
                 if !ch.is_ascii_hexdigit() {
-                    return ModeTransition::new_mode(Normal::new());
+                    return ModeTransition::pop()
                 }
 
                 let replacing_ch = (ch.to_digit(16).unwrap() as u8) | self.hex_half.unwrap();
                 let delta = ops::replace(&buffer.data, &buffer.selection, replacing_ch); // lossy!
                 options.make_dirty(buffer.apply_delta(delta));
-                ModeTransition::new_mode(Normal::new())
+                ModeTransition::pop()
             }
         } else if let Event::Key(_) = evt {
-            ModeTransition::new_mode(Normal::new())
+            ModeTransition::pop()
         } else {
             ModeTransition::not_handled(*self)
         }

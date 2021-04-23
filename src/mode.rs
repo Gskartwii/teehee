@@ -24,22 +24,29 @@ pub trait Mode: 'static {
     fn as_any(&self) -> &dyn std::any::Any;
 }
 
-pub struct ModeTransition {
-    pub next_mode: Box<dyn Mode>,
-    pub handled: bool,
+pub enum ModeTransition {
+    NotHandled(Box<dyn Mode>),
+    Push(Vec<Box<dyn Mode>>),
+    Pop,
 }
 
 impl ModeTransition {
     pub fn new_mode(mode: impl Mode) -> Self {
-        ModeTransition{
-            next_mode: Box::new(mode),
-            handled: true,
-        }
+        ModeTransition::Push(
+            vec![Box::new(mode)],
+        )
+    }
+    pub fn nest_mode(parent: impl Mode, nested: impl Mode) -> Self {
+        ModeTransition::Push(
+            vec![Box::new(parent), Box::new(nested)],
+        )
     }
     pub fn not_handled(mode: impl Mode) -> Self {
-        ModeTransition{
-            next_mode: Box::new(mode),
-            handled: false,
-        }
+        ModeTransition::NotHandled(
+            Box::new(mode),
+        )
+    }
+    pub fn pop() -> Self {
+        ModeTransition::Pop
     }
 }

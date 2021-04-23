@@ -1,6 +1,5 @@
 use super::buffer::Buffers;
 use super::mode::{Mode, ModeTransition};
-use super::modes::normal::Normal;
 use super::modes::search::{Pattern, SearchAcceptor};
 use super::selection::SelRegion;
 use super::view::view_options::ViewOptions;
@@ -20,7 +19,7 @@ impl SearchAcceptor for Collapse {
     ) -> ModeTransition {
         let buffer = buffers.current_mut();
         if pattern.pieces.is_empty() {
-            return ModeTransition::new_mode(Normal::new());
+            return ModeTransition::pop();
         }
         let matched_ranges = pattern.map_selections_to_matches(&buffer);
         let matched_len: usize = matched_ranges
@@ -31,7 +30,7 @@ impl SearchAcceptor for Collapse {
         if matched_len == 0 {
             // Nothing selected was matched: refuse to split because it would yield
             // an empty selection (invalid)
-            return ModeTransition::new_mode(Normal::new());
+            return ModeTransition::pop();
         }
 
         let mut remaining_matched_ranges = &matched_ranges[..];
@@ -43,7 +42,7 @@ impl SearchAcceptor for Collapse {
                 .map(|x| SelRegion::new(x.start, x.end - 1).inherit_direction(&base_region))
                 .collect()
         }));
-        ModeTransition::new_mode(Normal::new())
+        ModeTransition::pop()
     }
 }
 

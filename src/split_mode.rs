@@ -6,7 +6,6 @@ use super::buffer::*;
 use super::cmd_count;
 use super::keymap::*;
 use super::mode::*;
-use super::modes::normal::Normal;
 use super::modes::search::{Pattern, PatternPiece, Search, SearchAcceptor};
 use super::selection::*;
 use super::view::view_options::ViewOptions;
@@ -54,7 +53,7 @@ impl SearchAcceptor for Split {
     ) -> ModeTransition {
         let buffer = buffers.current_mut();
         if pattern.pieces.is_empty() {
-            return ModeTransition::new_mode(Normal::new());
+            return ModeTransition::pop();
         }
         let matched_ranges = pattern.map_selections_to_matches(&buffer);
         let matched_len: usize = matched_ranges
@@ -65,7 +64,7 @@ impl SearchAcceptor for Split {
         if matched_len == buffer.selection.len_bytes() {
             // Everything selected was matched: refuse to split because it would yield
             // an empty selection (invalid)
-            return ModeTransition::new_mode(Normal::new());
+            return ModeTransition::pop();
         }
 
         let mut remaining_matched_ranges = &matched_ranges[..];
@@ -95,7 +94,7 @@ impl SearchAcceptor for Split {
 
             out
         }));
-        ModeTransition::new_mode(Normal::new())
+        ModeTransition::pop()
     }
 }
 
@@ -128,7 +127,7 @@ impl Mode for Split {
                             })
                             .collect()
                     }));
-                    ModeTransition::new_mode(Normal::new())
+                    ModeTransition::pop()
                 }
                 Action::Null => self.apply_search(
                     Pattern {
@@ -142,7 +141,7 @@ impl Mode for Split {
                 Action::Search { hex } => ModeTransition::new_mode(Search::new(*self, hex)),
             }
         } else if let Event::Key(_) = evt {
-            ModeTransition::new_mode(Normal::new())
+            ModeTransition::pop()
         } else {
             ModeTransition::not_handled(*self)
         }

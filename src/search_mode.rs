@@ -1,7 +1,6 @@
 use super::buffer::*;
 use super::keymap::*;
 use super::mode::*;
-use super::modes::normal::Normal;
 use super::view::view_options::ViewOptions;
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use jetscii::ByteSubstring;
@@ -214,7 +213,7 @@ impl Mode for Search {
                 Action::SwitchInputMode => {
                     hex = !hex;
                 }
-                Action::Cancel => return ModeTransition::new_mode(Normal::new()),
+                Action::Cancel => return ModeTransition::pop(),
                 Action::Finish => {
                     return self.next.apply_search(
                         pattern,

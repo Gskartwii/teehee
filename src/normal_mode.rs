@@ -122,7 +122,7 @@ impl Mode for Normal {
                         options.make_dirty(
                             buffer.map_selections(|region| vec![region.jump_to(offset)]),
                         );
-                        ModeTransition::new_mode(Normal::new())
+                        ModeTransition::pop()
                     }
                 },
                 Action::ExtendToMode => match self.count_state {
@@ -131,7 +131,7 @@ impl Mode for Normal {
                     }
                     cmd_count::State::Some { count: offset, .. } => {
                         options.make_dirty(buffer.map_selections(|region| vec![region.extend_to(offset)]));
-                        ModeTransition::new_mode(Normal::new())
+                        ModeTransition::pop()
                     }
                 },
                 Action::SplitMode => ModeTransition::new_mode(modes::split::Split::new()),
@@ -173,7 +173,7 @@ impl Mode for Normal {
                             self.count_state.to_count(),
                         )]
                     }));
-                    ModeTransition::new_mode(Normal::new())
+                    ModeTransition::pop()
                 }
                 Action::Extend(direction) => {
                     let max_bytes = buffer.data.len();
@@ -185,15 +185,15 @@ impl Mode for Normal {
                             self.count_state.to_count(),
                         )]
                     }));
-                    ModeTransition::new_mode(Normal::new())
+                    ModeTransition::pop()
                 }
                 Action::SwapCaret => {
                     buffer.map_selections(|region| vec![region.swap_caret()]);
-                    ModeTransition::new_mode(Normal::new())
+                    ModeTransition::pop()
                 }
                 Action::CollapseSelection => {
                     buffer.map_selections(|region| vec![region.collapse()]);
-                    ModeTransition::new_mode(Normal::new())
+                    ModeTransition::pop()
                 }
                 Action::Delete { register } => {
                     buffer.yank_selections(register);
@@ -201,7 +201,7 @@ impl Mode for Normal {
                         let delta = ops::deletion(&buffer.data, &buffer.selection);
                         options.make_dirty(buffer.apply_delta(delta));
                     }
-                    ModeTransition::new_mode(Normal::new())
+                    ModeTransition::pop()
                 }
                 Action::Change { hex, register } => {
                     buffer.yank_selections(register);
@@ -217,7 +217,7 @@ impl Mode for Normal {
                 }
                 Action::Yank { register } => {
                     buffer.yank_selections(register);
-                    ModeTransition::new_mode(Normal::new())
+                    ModeTransition::pop()
                 }
                 Action::Paste { register, after } => {
                     let delta = ops::paste(
@@ -228,7 +228,7 @@ impl Mode for Normal {
                         self.count_state.to_count(),
                     );
                     options.make_dirty(buffer.apply_delta(delta));
-                    ModeTransition::new_mode(Normal::new())
+                    ModeTransition::pop()
                 }
                 // selection indexing in the UI starts at 1
                 // hence we check for count > 0 and offset by -1
@@ -241,7 +241,7 @@ impl Mode for Normal {
                         _ => options
                             .make_dirty(buffer.remove_selection(buffer.selection.main_selection)),
                     }
-                    ModeTransition::new_mode(Normal::new())
+                    ModeTransition::pop()
                 }
                 Action::RetainMain => {
                     match self.count_state {
@@ -251,24 +251,24 @@ impl Mode for Normal {
                         _ => options
                             .make_dirty(buffer.retain_selection(buffer.selection.main_selection)),
                     }
-                    ModeTransition::new_mode(Normal::new())
+                    ModeTransition::pop()
                 }
 
                 // new_mode to clear count
                 Action::SelectNext => {
                     options.make_dirty(buffer.select_next(self.count_state.to_count()));
-                    ModeTransition::new_mode(Normal::new())
+                    ModeTransition::pop()
                 }
                 Action::SelectPrev => {
                     options.make_dirty(buffer.select_prev(self.count_state.to_count()));
-                    ModeTransition::new_mode(Normal::new())
+                    ModeTransition::pop()
                 }
                 Action::SelectAll => {
                     buffer.selection.select_all(buffer.data.len());
                     options.make_dirty(DirtyBytes::ChangeInPlace(vec![
                         (0..buffer.data.len()).into()
                     ]));
-                    ModeTransition::new_mode(Normal::new())
+                    ModeTransition::pop()
                 }
                 Action::CollapseMode { hex } => ModeTransition::new_mode(
                     modes::search::Search::new(modes::collapse::Collapse(), hex),
@@ -279,7 +279,7 @@ impl Mode for Normal {
                         buffer.selection.main().len(),
                         buffer.selection.main().len()
                     ));
-                    ModeTransition::new_mode(Normal::new())
+                    ModeTransition::pop()
                 }
                 Action::CommandMode => ModeTransition::new_mode(modes::command::Command::new()),
                 Action::Undo => {
@@ -287,14 +287,14 @@ impl Mode for Normal {
                         None => options.info = Some("nothing left to undo".to_owned()),
                         Some(dirty) => options.make_dirty(dirty),
                     }
-                    ModeTransition::new_mode(Normal::new())
+                    ModeTransition::pop()
                 }
                 Action::Redo => {
                     match buffer.perform_redo() {
                         None => options.info = Some("nothing left to redo".to_owned()),
                         Some(dirty) => options.make_dirty(dirty),
                     }
-                    ModeTransition::new_mode(Normal::new())
+                    ModeTransition::pop()
                 }
             }
         } else {

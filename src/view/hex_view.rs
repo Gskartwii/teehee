@@ -48,7 +48,7 @@ pub struct HexView {
     last_visible_prompt_col: Cell<usize>,
     last_draw_time: time::Duration,
 
-    mode: Box<dyn Mode>,
+    mode_stack: Vec<Box<dyn Mode>>,
 }
 
 impl HexView {
@@ -61,8 +61,16 @@ impl HexView {
 
             last_draw_time: Default::default(),
 
-            mode: Box::new(modes::normal::Normal::new()),
+            mode_stack: vec![Box::new(modes::normal::Normal::new())],
         }
+    }
+
+    fn mode(&self) -> &dyn Mode {
+        &(**self.mode_stack.last().unwrap())
+    }
+
+    fn reset_normal_mode(&mut self) {
+        self.mode_stack = vec![Box::new(modes::normal::Normal::new())];
     }
 
     fn draw_hex_row(
@@ -271,7 +279,7 @@ impl HexView {
                     } else {
                         self.inactive_caret_style()
                     };
-                    if self.mode.has_half_cursor() {
+                    if self.mode().has_half_cursor() {
                         if i == selected_regions[0].min() {
                             caret_cmd = caret_cmd
                                 .with_mid_style(caret_style)
@@ -326,7 +334,7 @@ impl HexView {
             length += 3;
         }
         length += 1; // leftarrow
-        length += 2 + self.mode.name().len();
+        length += 2 + self.mode().name().len();
         length += 1; // leftarrow
         length += format!(
             " {} sels ({}) ",
@@ -372,7 +380,7 @@ impl HexView {
                     .on(Color::Red)
             ),
             style::PrintStyledContent(
-                style::style(format!(" {} ", self.mode.name()))
+                style::style(format!(" {} ", self.mode().name()))
                     .with(Color::AnsiValue(16))
                     .on(Color::DarkYellow)
             ),
@@ -445,7 +453,7 @@ impl HexView {
 
         self.draw_statusline_here(stdout)?;
 
-        let any_mode = self.mode.as_any();
+        let any_mode = self.mode().as_any();
         let prompter = if let Some(statusliner) = any_mode.downcast_ref::<modes::search::Search>() {
             Some(statusliner as &dyn StatusLinePrompter)
         } else if let Some(statusliner) = any_mode.downcast_ref::<modes::command::Command>() {
@@ -468,7 +476,7 @@ impl HexView {
         self.buffers.current().overflow_sel_style().map(|style| {
             match style {
                 OverflowSelectionStyle::CursorTail | OverflowSelectionStyle::Cursor
-                    if self.mode.has_half_cursor() =>
+                    if self.mode().has_half_cursor() =>
                 {
                     StylingCommand::default().with_mid_style(self.empty_caret_style())
                 }
@@ -701,20 +709,28 @@ impl HexView {
         stdout.flush()?;
 
         loop {
-            if !self.mode.takes_input() {
+            if !self.mode().takes_input() {
                 break;
             }
             let evt = event::read()?;
             self.options.info = None;
 
-            let ModeTransition{next_mode, handled} = self
-                .mode
-                .transition(&evt, &mut self.buffers, &mut self.options);
-            self.mode = next_mode;
-            if handled {
-                self.transition(stdout)?;
-            } else {
-                self.handle_event_default(stdout, evt)?;
+            let old_mode = self.mode_stack.pop().unwrap();
+            match old_mode.transition(&evt, &mut self.buffers, &mut self.options) {
+                ModeTransition::NotHandled(old) => {
+                    self.mode_stack.push(old);
+                    self.handle_event_default(stdout, evt)?;
+                },
+                ModeTransition::Pop => {
+                    if self.mode_stack.is_empty() {
+                        self.reset_normal_mode();
+                    }
+                    self.transition(stdout)?;
+                },
+                ModeTransition::Push(mut new) => {
+                    self.mode_stack.append(&mut new);
+                    self.transition(stdout)?;
+                },
             }
 
             self.draw_statusline(stdout)?;

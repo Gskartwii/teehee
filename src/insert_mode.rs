@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use super::buffer::*;
 use super::keymap::*;
 use super::mode::*;
-use super::modes::normal::Normal;
 use super::operations as ops;
 use super::view::view_options::ViewOptions;
 
@@ -128,7 +127,7 @@ impl Mode for Insert {
             match action {
                 Action::Exit => {
                     buffer.commit_delta(); // Flush this insertion as a single action
-                    ModeTransition::new_mode(Normal::new())
+                    ModeTransition::pop()
                 }
                 Action::InsertNull => {
                     let inserted_bytes = vec![0];

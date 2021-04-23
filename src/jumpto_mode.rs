@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use super::buffer::*;
 use super::keymap::*;
 use super::mode::*;
-use super::modes::normal::Normal;
 use super::selection::*;
 use super::view::view_options::ViewOptions;
 
@@ -59,9 +58,9 @@ impl Mode for JumpTo {
                     vec![region.jump_to_boundary(direction, options.bytes_per_line, max_bytes)]
                 }));
             }
-            ModeTransition::new_mode(Normal::new())
+            ModeTransition::pop()
         } else if let Event::Key(_) = evt {
-            ModeTransition::new_mode(Normal::new())
+            ModeTransition::pop()
         } else {
             ModeTransition::not_handled(*self)
         }

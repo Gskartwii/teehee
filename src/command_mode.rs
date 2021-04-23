@@ -1,7 +1,6 @@
 use super::buffer::*;
 use super::keymap::*;
 use super::mode::*;
-use super::modes::normal::Normal;
 use super::modes::quitting;
 use super::view::view_options::{DirtyBytes, ViewOptions};
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
@@ -45,7 +44,7 @@ mod cmd {
     pub fn quit(buf: &mut Buffers, options: &mut ViewOptions, _: &str) -> ModeTransition {
         if buf.iter().any(|x| x.dirty && x.path.is_some()) {
             options.info = Some("unsaved changes! Run :wq or :q! instead.".into());
-            ModeTransition::new_mode(Normal::new())
+            ModeTransition::pop()
         } else {
             ModeTransition::new_mode(quitting::Quitting {})
         }
@@ -65,17 +64,17 @@ mod cmd {
         if let Some(path) = path {
             if let Err(e) = fs::write(&path, buf.current().data.slice_to_cow(..)) {
                 options.info = Some(format!("write failed: {}", e));
-                return ModeTransition::new_mode(Normal::new());
+                return ModeTransition::pop();
             }
 
             let owned_path = path.to_owned();
             let buf_mut = buf.current_mut();
             buf_mut.dirty = false;
             buf_mut.update_path_if_missing(owned_path);
-            ModeTransition::new_mode(Normal::new())
+            ModeTransition::pop()
         } else {
             options.info = Some("buffer has no path".into());
-            ModeTransition::new_mode(Normal::new())
+            ModeTransition::pop()
         }
     }
 
@@ -84,12 +83,12 @@ mod cmd {
             if let Some(path) = buf.path.as_ref() {
                 if let Err(e) = fs::write(&path, buf.data.slice_to_cow(..)) {
                     options.info = Some(format!("write failed: {}", e));
-                    return ModeTransition::new_mode(Normal::new());
+                    return ModeTransition::pop();
                 }
                 buf.dirty = false;
             }
         }
-        ModeTransition::new_mode(Normal::new())
+        ModeTransition::pop()
     }
 
     pub fn write_quit(buffers: &mut Buffers, options: &mut ViewOptions, _: &str) -> ModeTransition {
@@ -97,7 +96,7 @@ mod cmd {
             if let Some(path) = buf.path.as_ref() {
                 if let Err(e) = fs::write(&path, buf.data.slice_to_cow(..)) {
                     options.info = Some(format!("write failed: {}", e));
-                    return ModeTransition::new_mode(Normal::new());
+                    return ModeTransition::pop();
                 }
                 buf.dirty = false;
             }
@@ -113,10 +112,10 @@ mod cmd {
         let result = buffers.switch_buffer(filename);
         if let Err(e) = result {
             options.info = Some(e.to_string());
-            return ModeTransition::new_mode(Normal::new());
+            return ModeTransition::pop();
         }
         options.make_dirty(DirtyBytes::ChangeLength);
-        ModeTransition::new_mode(Normal::new())
+        ModeTransition::pop()
     }
 
     pub fn delete_buffer(
@@ -126,11 +125,11 @@ mod cmd {
     ) -> ModeTransition {
         if buffers.current().dirty && buffers.current().path.is_some() {
             options.info = Some("buffer is dirty, use :db! if you're sure".to_string());
-            return ModeTransition::new_mode(Normal::new());
+            return ModeTransition::pop();
         }
         buffers.delete_current();
         options.make_dirty(DirtyBytes::ChangeLength);
-        ModeTransition::new_mode(Normal::new())
+        ModeTransition::pop()
     }
 
     pub fn force_delete_buffer(
@@ -140,7 +139,7 @@ mod cmd {
     ) -> ModeTransition {
         buffers.delete_current();
         options.make_dirty(DirtyBytes::ChangeLength);
-        ModeTransition::new_mode(Normal::new())
+        ModeTransition::pop()
     }
 }
 
@@ -195,7 +194,7 @@ impl Command {
             handler(buffers, options, if rest.len() == 0 { rest } else { &rest[1..] })
         } else {
             options.info = Some(format!("Unknown command {}", name));
-            ModeTransition::new_mode(Normal::new())
+            ModeTransition::pop()
         }
     }
 }
@@ -232,7 +231,7 @@ impl Mode for Command {
                     cursor += 1;
                 }
                 Action::CursorRight => {}
-                Action::Cancel => return ModeTransition::new_mode(Normal::new()),
+                Action::Cancel => return ModeTransition::pop(),
                 Action::Finish => return self.finish(buffers, options),
             }
             ModeTransition::new_mode(Command { command, cursor })
