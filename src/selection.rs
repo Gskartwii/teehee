@@ -387,7 +387,10 @@ impl SelRegion {
         let both_backward = self.backward() && other.backward();
         let mut merged = match (both_forward, both_backward) {
             (true, true) => {
-                assert_eq!(self.caret, other.caret, "Can't merge disjoint cursor selections");
+                assert_eq!(
+                    self.caret, other.caret,
+                    "Can't merge disjoint cursor selections"
+                );
                 *self
             }
             (true, false) => SelRegion::new(

@@ -13,9 +13,9 @@ categories = ["command-line-utilities"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-crossterm = "0.17.5"
+crossterm = "0.21.0"
 xi-rope = "0.3.0"
 lazy_static = "1.4.0"
-jetscii = "0.4.4"
+jetscii = "0.5"
 regex = "1"
 maplit = "1.0.2"

@@ -77,9 +77,11 @@ impl Buffer {
     fn apply_delta_to_buffer(&mut self, delta: RopeDelta, is_final: bool) {
         let next_data = self.data.apply_delta(&delta);
         if is_final {
-            self.history.perform_final(&self.data, delta, self.selection.clone());
+            self.history
+                .perform_final(&self.data, delta, self.selection.clone());
         } else {
-            self.history.perform_partial(&self.data, delta, &self.selection);
+            self.history
+                .perform_partial(&self.data, delta, &self.selection);
         }
         self.data = next_data;
         self.dirty = true;
@@ -138,7 +140,9 @@ impl Buffer {
     }
 
     pub fn perform_undo(&mut self) -> Option<DirtyBytes> {
-        if let Some((undo_delta, old_selection)) = self.history.undo(&self.data, self.selection.clone()) {
+        if let Some((undo_delta, old_selection)) =
+            self.history.undo(&self.data, self.selection.clone())
+        {
             self.selection = old_selection;
             self.data = self.data.apply_delta(&undo_delta);
             self.dirty = true;
@@ -149,7 +153,9 @@ impl Buffer {
     }
 
     pub fn perform_redo(&mut self) -> Option<DirtyBytes> {
-        if let Some((redo_delta, old_selection)) = self.history.redo(&self.data, self.selection.clone()) {
+        if let Some((redo_delta, old_selection)) =
+            self.history.redo(&self.data, self.selection.clone())
+        {
             self.selection = old_selection;
             self.data = self.data.apply_delta(&redo_delta);
             self.dirty = true;

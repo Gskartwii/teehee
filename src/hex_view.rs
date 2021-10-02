@@ -9,8 +9,8 @@ use crossterm::{
     cursor,
     event::{self, Event},
     execute, queue, style,
-    style::Color,
-    terminal, Result,
+    style::{Color, Stylize},
+    terminal, QueueableCommand, Result,
 };
 use xi_rope::Interval;
 
@@ -122,6 +122,17 @@ trait StatusLinePrompter: Mode {
     ) -> Result<usize>;
 }
 
+macro_rules! d_queue {
+    ($writer:expr $(, $command:expr)* $(,)?) => {{
+        Ok::<_, crossterm::ErrorKind>(&mut *$writer)
+            $(.and_then(|mut writer| {
+                QueueableCommand::queue(&mut writer, $command)?;
+                Ok(writer)
+            }))*
+            .map(|_| ())
+    }}
+}
+
 impl StatusLinePrompter for modes::search::Search {
     fn render_with_size(
         &self,
@@ -130,7 +141,7 @@ impl StatusLinePrompter for modes::search::Search {
         last_start_col: usize,
     ) -> Result<usize> {
         let mut start_column = last_start_col;
-        queue!(
+        d_queue!(
             stdout,
             style::PrintStyledContent(
                 style::style("search:")
@@ -160,12 +171,12 @@ impl StatusLinePrompter for modes::search::Search {
             {
                 match piece {
                     PatternPiece::Literal(byte) if normalized_cursor != i => {
-                        queue!(stdout, style::Print(format!("{:02x} ", byte)))?
+                        d_queue!(stdout, style::Print(format!("{:02x} ", byte)))?
                     }
                     PatternPiece::Literal(byte)
                         if normalized_cursor == i && self.hex_half.is_some() =>
                     {
-                        queue!(
+                        d_queue!(
                             stdout,
                             style::Print(format!("{:x}", byte >> 4)),
                             style::PrintStyledContent(
@@ -176,7 +187,7 @@ impl StatusLinePrompter for modes::search::Search {
                             style::Print(" "),
                         )?
                     }
-                    PatternPiece::Literal(byte) => queue!(
+                    PatternPiece::Literal(byte) => d_queue!(
                         stdout,
                         style::PrintStyledContent(
                             style::style(format!("{:02x}", byte))
@@ -185,11 +196,11 @@ impl StatusLinePrompter for modes::search::Search {
                         ),
                         style::Print(" "),
                     )?,
-                    PatternPiece::Wildcard if normalized_cursor != i => queue!(
+                    PatternPiece::Wildcard if normalized_cursor != i => d_queue!(
                         stdout,
                         style::PrintStyledContent(style::style("** ").with(style::Color::DarkRed))
                     )?,
-                    PatternPiece::Wildcard => queue!(
+                    PatternPiece::Wildcard => d_queue!(
                         stdout,
                         style::PrintStyledContent(
                             style::style("**")
@@ -201,7 +212,7 @@ impl StatusLinePrompter for modes::search::Search {
                 }
             }
             if self.cursor == self.pattern.pieces.len() {
-                queue!(
+                d_queue!(
                     stdout,
                     style::PrintStyledContent(
                         style::style("  ")
@@ -256,9 +267,9 @@ impl StatusLinePrompter for modes::search::Search {
                 PatternPiece::Literal(byte)
                     if normalized_cursor != i && (byte.is_ascii_graphic() || *byte == 0x20) =>
                 {
-                    queue!(stdout, style::Print(format!("{}", *byte as char)))?
+                    d_queue!(stdout, style::Print(format!("{}", *byte as char)))?
                 }
-                PatternPiece::Literal(byte) if normalized_cursor != i => queue!(
+                PatternPiece::Literal(byte) if normalized_cursor != i => d_queue!(
                     stdout,
                     style::PrintStyledContent(
                         style::style(format!("<{:02x}>", byte))
@@ -269,7 +280,7 @@ impl StatusLinePrompter for modes::search::Search {
                 PatternPiece::Literal(byte)
                     if normalized_cursor == i && (byte.is_ascii_graphic() || *byte == 0x20) =>
                 {
-                    queue!(
+                    d_queue!(
                         stdout,
                         style::PrintStyledContent(
                             style::style(format!("{}", *byte as char))
@@ -278,7 +289,7 @@ impl StatusLinePrompter for modes::search::Search {
                         ),
                     )?
                 }
-                PatternPiece::Literal(byte) => queue!(
+                PatternPiece::Literal(byte) => d_queue!(
                     stdout,
                     style::PrintStyledContent(
                         style::style(format!("<{:02x}>", byte))
@@ -286,11 +297,11 @@ impl StatusLinePrompter for modes::search::Search {
                             .on(style::Color::White)
                     ),
                 )?,
-                PatternPiece::Wildcard if normalized_cursor != i => queue!(
+                PatternPiece::Wildcard if normalized_cursor != i => d_queue!(
                     stdout,
                     style::PrintStyledContent(style::style("*").with(style::Color::DarkRed))
                 )?,
-                PatternPiece::Wildcard => queue!(
+                PatternPiece::Wildcard => d_queue!(
                     stdout,
                     style::PrintStyledContent(
                         style::style("*")
@@ -302,7 +313,7 @@ impl StatusLinePrompter for modes::search::Search {
         }
 
         if self.cursor == self.pattern.pieces.len() {
-            queue!(
+            d_queue!(
                 stdout,
                 style::PrintStyledContent(
                     style::style(" ")
@@ -324,7 +335,7 @@ impl StatusLinePrompter for modes::command::Command {
         last_start_col: usize,
     ) -> Result<usize> {
         let mut start_column = last_start_col;
-        queue!(
+        d_queue!(
             stdout,
             style::PrintStyledContent(
                 style::style(":")
@@ -348,7 +359,7 @@ impl StatusLinePrompter for modes::command::Command {
             start_column += required_length - max_width;
         }
 
-        queue!(
+        d_queue!(
             stdout,
             style::Print(
                 &self.command
@@ -357,7 +368,7 @@ impl StatusLinePrompter for modes::command::Command {
         )?;
 
         if self.cursor == self.command.len() {
-            queue!(
+            d_queue!(
                 stdout,
                 style::PrintStyledContent(
                     style::style(" ")
@@ -533,46 +544,46 @@ impl HexView {
     fn default_style(&self) -> PrioritizedStyle {
         PrioritizedStyle {
             style: style::ContentStyle::new()
-                .foreground(style::Color::White)
-                .background(style::Color::Black),
+                .with(style::Color::White)
+                .on(style::Color::Black),
             priority: Priority::Basic,
         }
     }
     fn active_selection_style(&self) -> PrioritizedStyle {
         PrioritizedStyle {
             style: style::ContentStyle::new()
-                .foreground(style::Color::Black)
-                .background(style::Color::DarkYellow),
+                .with(style::Color::Black)
+                .on(style::Color::DarkYellow),
             priority: Priority::Selection,
         }
     }
     fn inactive_selection_style(&self) -> PrioritizedStyle {
         PrioritizedStyle {
             style: style::ContentStyle::new()
-                .foreground(style::Color::Black)
-                .background(style::Color::DarkGrey),
+                .with(style::Color::Black)
+                .on(style::Color::DarkGrey),
             priority: Priority::Selection,
         }
     }
     fn active_caret_style(&self) -> PrioritizedStyle {
         PrioritizedStyle {
             style: style::ContentStyle::new()
-                .foreground(style::Color::AnsiValue(16))
-                .background(style::Color::White),
+                .with(style::Color::AnsiValue(16))
+                .on(style::Color::White),
             priority: Priority::Cursor,
         }
     }
     fn inactive_caret_style(&self) -> PrioritizedStyle {
         PrioritizedStyle {
             style: style::ContentStyle::new()
-                .foreground(style::Color::Black)
-                .background(style::Color::DarkGrey),
+                .with(style::Color::Black)
+                .on(style::Color::DarkGrey),
             priority: Priority::Cursor,
         }
     }
     fn empty_caret_style(&self) -> PrioritizedStyle {
         PrioritizedStyle {
-            style: style::ContentStyle::new().background(style::Color::Green),
+            style: style::ContentStyle::new().on(style::Color::Green),
             priority: Priority::Cursor,
         }
     }
@@ -867,7 +878,11 @@ impl HexView {
     fn draw(&self, stdout: &mut impl Write) -> Result<time::Duration> {
         let begin = time::Instant::now();
 
-        queue!(stdout, cursor::MoveTo(0, 0), terminal::Clear(terminal::ClearType::All))?;
+        queue!(
+            stdout,
+            cursor::MoveTo(0, 0),
+            terminal::Clear(terminal::ClearType::All)
+        )?;
 
         let visible_bytes = self.visible_bytes();
         let start_index = visible_bytes.start;

@@ -87,23 +87,37 @@ impl History {
             .push((Action::from_delta(delta).invert(current_rope), selection));
         self.redo = vec![];
     }
-    pub fn perform_partial(&mut self, current_rope: &Rope, delta: RopeDelta, selection: &Selection) {
+    pub fn perform_partial(
+        &mut self,
+        current_rope: &Rope,
+        delta: RopeDelta,
+        selection: &Selection,
+    ) {
         let this_inversion = Action::from_delta(delta).invert(current_rope);
 
         let replaced = self.partial.take().map_or_else(
             || (this_inversion.clone(), selection.clone()),
-            |(action, selection)| (this_inversion.clone().chain(current_rope, action.delta), selection),
+            |(action, selection)| {
+                (
+                    this_inversion.clone().chain(current_rope, action.delta),
+                    selection,
+                )
+            },
         );
         self.partial = Some(replaced);
     }
-    pub fn commit_partial(&mut self,) {
+    pub fn commit_partial(&mut self) {
         if let Some((partial, selection)) = self.partial.take() {
             self.undo.push((partial, selection));
             self.redo = vec![];
         }
     }
 
-    pub fn undo(&mut self, current_rope: &Rope, selection: Selection) -> Option<(RopeDelta, Selection)> {
+    pub fn undo(
+        &mut self,
+        current_rope: &Rope,
+        selection: Selection,
+    ) -> Option<(RopeDelta, Selection)> {
         match self.undo.pop() {
             Some((action, old_selection)) => {
                 self.redo.push((action.invert(current_rope), selection));
@@ -114,7 +128,11 @@ impl History {
         }
     }
 
-    pub fn redo(&mut self, current_rope: &Rope, selection: Selection) -> Option<(RopeDelta, Selection)> {
+    pub fn redo(
+        &mut self,
+        current_rope: &Rope,
+        selection: Selection,
+    ) -> Option<(RopeDelta, Selection)> {
         match self.redo.pop() {
             Some((action, old_selection)) => {
                 self.undo.push((action.invert(current_rope), selection));
