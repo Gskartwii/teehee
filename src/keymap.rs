@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crossterm::event::{Event, KeyEvent};
+use crossterm::event::{Event, KeyEvent, KeyModifiers};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct KeyMap<T: Copy> {
@@ -10,7 +10,15 @@ pub struct KeyMap<T: Copy> {
 impl<T: Copy> KeyMap<T> {
     pub fn event_to_action(&self, evt: &Event) -> Option<T> {
         if let Event::Key(evt) = evt {
-            self.maps.get(evt).copied()
+            self.maps
+                .get(evt)
+                .or_else(|| {
+                    self.maps.get(&KeyEvent {
+                        modifiers: evt.modifiers | KeyModifiers::SHIFT,
+                        ..*evt
+                    })
+                })
+                .copied()
         } else {
             None
         }
