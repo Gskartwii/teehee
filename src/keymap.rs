@@ -11,12 +11,9 @@ impl<T: Copy> KeyMap<T> {
     pub fn event_to_action(&self, evt: &Event) -> Option<T> {
         if let Event::Key(evt) = evt {
             self.maps
-                .get(evt)
-                .or_else(|| {
-                    self.maps.get(&KeyEvent {
-                        modifiers: evt.modifiers | KeyModifiers::SHIFT,
-                        ..*evt
-                    })
+                .get(&KeyEvent {
+                    modifiers: evt.modifiers & !KeyModifiers::SHIFT,
+                    ..*evt
                 })
                 .copied()
         } else {
@@ -27,17 +24,17 @@ impl<T: Copy> KeyMap<T> {
 
 macro_rules! normalized_char {
     ($ch:expr) => {
-        if $ch.is_ascii_uppercase() {
+        /*if $ch.is_ascii_uppercase() {
             KeyEvent {
                 code: KeyCode::Char($ch),
                 modifiers: KeyModifiers::SHIFT,
             }
-        } else {
-            KeyEvent {
-                code: KeyCode::Char($ch),
-                modifiers: KeyModifiers::NONE,
-            }
+        } else {*/
+        KeyEvent {
+            code: KeyCode::Char($ch),
+            modifiers: KeyModifiers::NONE,
         }
+        /*}*/
     };
 }
 
