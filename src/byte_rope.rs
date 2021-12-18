@@ -14,6 +14,7 @@ pub struct Bytes(pub Vec<u8>);
 #[derive(Clone, Default)]
 pub struct Rope(Node<RopeInfo>);
 pub type RopeDelta = Delta<RopeInfo>;
+#[allow(dead_code)]
 pub type RopeDeltaElement = DeltaElement<RopeInfo>;
 
 impl Leaf for Bytes {
@@ -109,7 +110,7 @@ impl Rope {
         }
     }
 
-    pub fn slice_to_cow<'a, T: IntervalBounds>(&'a self, range: T) -> Cow<'a, [u8]> {
+    pub fn slice_to_cow<T: IntervalBounds>(&self, range: T) -> Cow<[u8]> {
         let mut iter = self.iter_chunks(range);
         let first = iter.next();
         let second = iter.next();

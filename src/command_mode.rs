@@ -58,7 +58,7 @@ mod cmd {
 
     pub fn write(buf: &mut Buffers, filename: &str) -> ModeTransition {
         let path = if filename.is_empty() {
-            buf.current().path.as_ref().map(|p| p.as_path())
+            buf.current().path.as_deref()
         } else {
             Some(std::path::Path::new(&filename))
         };
@@ -182,9 +182,9 @@ impl Command {
     fn finish(&self, buffers: &mut Buffers) -> ModeTransition {
         let (name, rest) = self
             .command
-            .split_at(self.command.find(' ').unwrap_or(self.command.len()));
+            .split_at(self.command.find(' ').unwrap_or_else(|| self.command.len()));
         if let Some(handler) = DEFAULT_COMMANDS.get(name) {
-            handler(buffers, if rest.len() == 0 { rest } else { &rest[1..] })
+            handler(buffers, if rest.is_empty() { rest } else { &rest[1..] })
         } else {
             ModeTransition::new_mode_and_info(Normal::new(), format!("Unknown command {}", name))
         }

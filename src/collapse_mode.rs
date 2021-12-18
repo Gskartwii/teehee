@@ -35,7 +35,7 @@ impl SearchAcceptor for Collapse {
                 let (this, next) = remaining_matched_ranges.split_first().unwrap();
                 remaining_matched_ranges = next;
 
-                this.into_iter()
+                this.iter()
                     .map(|x| SelRegion::new(x.start, x.end - 1).inherit_direction(&base_region))
                     .collect()
             }),

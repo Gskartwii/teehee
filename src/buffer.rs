@@ -234,6 +234,12 @@ pub struct Buffers {
     cur_buf_index: usize,
 }
 
+impl Default for Buffers {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Buffers {
     pub fn new() -> Buffers {
         Buffers::with_buffer(Buffer::default())

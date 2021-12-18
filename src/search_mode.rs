@@ -172,13 +172,7 @@ impl Search {
 
 impl Mode for Search {
     fn name(&self) -> Cow<'static, str> {
-        self.next
-            .borrow()
-            .as_ref()
-            .unwrap()
-            .name()
-            .to_owned()
-            .into()
+        self.next.borrow().as_ref().unwrap().name()
     }
 
     fn transition(

@@ -25,6 +25,7 @@ const LEFTARROW: &str = "";
 #[derive(Debug, Clone, Copy)]
 enum Priority {
     Basic,
+    #[allow(dead_code)]
     Mark,
     Selection,
     Cursor,
@@ -492,7 +493,7 @@ impl HexView {
             bytes.iter().copied().zip(mark_commands.iter().cloned()),
         )?;
 
-        let mut padding_length = if bytes.len() == 0 {
+        let mut padding_length = if bytes.is_empty() {
             self.bytes_per_line * 3
         } else {
             (self.bytes_per_line - bytes.len()) % self.bytes_per_line * 3
@@ -805,10 +806,10 @@ impl HexView {
         let any_mode = self.mode.as_any();
         let prompter = if let Some(statusliner) = any_mode.downcast_ref::<modes::search::Search>() {
             Some(statusliner as &dyn StatusLinePrompter)
-        } else if let Some(statusliner) = any_mode.downcast_ref::<modes::command::Command>() {
-            Some(statusliner as &dyn StatusLinePrompter)
         } else {
-            None
+            any_mode
+                .downcast_ref::<modes::command::Command>()
+                .map(|statusliner| statusliner as &dyn StatusLinePrompter)
         };
 
         if let Some(statusliner) = prompter {
