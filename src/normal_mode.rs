@@ -49,9 +49,13 @@ fn default_maps() -> KeyMap<Action> {
     KeyMap {
         maps: keys!(
             ('h' => Action::Move(Direction::Left)),
+            (key KeyCode::Left => Action::Move(Direction::Left)),
             ('j' => Action::Move(Direction::Down)),
+            (key KeyCode::Down => Action::Move(Direction::Down)),
             ('k' => Action::Move(Direction::Up)),
+            (key KeyCode::Up => Action::Move(Direction::Up)),
             ('l' => Action::Move(Direction::Right)),
+            (key KeyCode::Right => Action::Move(Direction::Right)),
             ('H' => Action::Extend(Direction::Left)),
             ('J' => Action::Extend(Direction::Down)),
             ('K' => Action::Extend(Direction::Up)),

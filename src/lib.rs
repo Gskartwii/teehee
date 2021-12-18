@@ -24,6 +24,7 @@ mod modes {
 
         #[derive(Debug, PartialEq, Eq, Clone, Copy)]
         pub struct Quitting();
+
         impl crate::mode::Mode for Quitting {
             fn name(&self) -> Cow<'static, str> {
                 "QUITTING".into()
