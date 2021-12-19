@@ -19,9 +19,13 @@ use lazy_static::lazy_static;
 fn default_maps() -> KeyMap<Direction> {
     KeyMap {
         maps: keys!(
+            (key KeyCode::Left => Direction::Left),
             ('h' => Direction::Left),
+            (key KeyCode::Down => Direction::Down),
             ('j' => Direction::Down),
+            (key KeyCode::Up => Direction::Up),
             ('k' => Direction::Up),
+            (key KeyCode::Right => Direction::Right),
             ('l' => Direction::Right)
         ),
     }

@@ -22,6 +22,48 @@ use std::io::Write;
 const VERTICAL: &str = "│";
 const LEFTARROW: &str = "";
 
+const COLOR_NULL: Color = Color::AnsiValue(242);
+// const COLOR_OFFSET: Color = Color::AnsiValue(242);
+const COLOR_ASCII_PRINTABLE: Color = Color::Cyan;
+const COLOR_ASCII_WHITESPACE: Color = Color::Green;
+const COLOR_ASCII_OTHER: Color = Color::Rgb {
+    r: 232,
+    g: 52,
+    b: 210,
+};
+const COLOR_NONASCII: Color = Color::Yellow;
+
+fn get_byte_color(byte: u8) -> Color {
+    if byte == 0x00 {
+        COLOR_NULL
+    } else if byte.is_ascii_graphic() {
+        COLOR_ASCII_PRINTABLE
+    } else if byte.is_ascii_whitespace() {
+        COLOR_ASCII_WHITESPACE
+    } else if byte.is_ascii() {
+        COLOR_ASCII_OTHER
+    } else {
+        COLOR_NONASCII
+    }
+}
+
+fn colorize_byte(byte: u8, style_cmd: StylingCommand) -> StylingCommand {
+    let default_content_style = style::ContentStyle {
+        foreground_color: None,
+        background_color: None,
+        attributes: Default::default(),
+    };
+    let start_style = *style_cmd.start_style().unwrap_or(&default_content_style);
+    style_cmd.with_start_style(PrioritizedStyle {
+        style: style::ContentStyle {
+            foreground_color: Some(get_byte_color(byte)),
+            background_color: start_style.background_color,
+            attributes: start_style.attributes,
+        },
+        priority: Priority::Basic,
+    })
+}
+
 #[derive(Debug, Clone, Copy)]
 enum Priority {
     Basic,
@@ -423,6 +465,7 @@ impl HexView {
         styled_bytes: impl IntoIterator<Item = (u8, StylingCommand)>,
     ) -> Result<()> {
         for (byte, style_cmd) in styled_bytes.into_iter() {
+            let style_cmd = colorize_byte(byte, style_cmd);
             if let Some(start_cmd) = style_cmd.start_style() {
                 queue_style(stdout, start_cmd)?;
             }
@@ -445,6 +488,7 @@ impl HexView {
         styled_bytes: impl IntoIterator<Item = (u8, StylingCommand)>,
     ) -> Result<()> {
         for (byte, style_cmd) in styled_bytes.into_iter() {
+            let style_cmd = colorize_byte(byte, style_cmd);
             if let Some(start_cmd) = style_cmd.start_style() {
                 queue_style(stdout, start_cmd)?;
             }
@@ -546,10 +590,11 @@ impl HexView {
         PrioritizedStyle {
             style: style::ContentStyle::new()
                 .with(style::Color::White)
-                .on(style::Color::Black),
+                .on(style::Color::Reset),
             priority: Priority::Basic,
         }
     }
+
     fn active_selection_style(&self) -> PrioritizedStyle {
         PrioritizedStyle {
             style: style::ContentStyle::new()
@@ -558,6 +603,7 @@ impl HexView {
             priority: Priority::Selection,
         }
     }
+
     fn inactive_selection_style(&self) -> PrioritizedStyle {
         PrioritizedStyle {
             style: style::ContentStyle::new()
@@ -566,14 +612,20 @@ impl HexView {
             priority: Priority::Selection,
         }
     }
+
     fn active_caret_style(&self) -> PrioritizedStyle {
         PrioritizedStyle {
             style: style::ContentStyle::new()
                 .with(style::Color::AnsiValue(16))
-                .on(style::Color::White),
+                .on(style::Color::Rgb {
+                    r: 235,
+                    g: 52,
+                    b: 107,
+                }),
             priority: Priority::Cursor,
         }
     }
+
     fn inactive_caret_style(&self) -> PrioritizedStyle {
         PrioritizedStyle {
             style: style::ContentStyle::new()
@@ -582,6 +634,7 @@ impl HexView {
             priority: Priority::Cursor,
         }
     }
+
     fn empty_caret_style(&self) -> PrioritizedStyle {
         PrioritizedStyle {
             style: style::ContentStyle::new().on(style::Color::Green),

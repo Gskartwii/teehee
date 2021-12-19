@@ -25,6 +25,7 @@ enum Action {
     RemoveLast,
     RemoveThis,
     Exit,
+    // Move(Direction),
 }
 
 fn default_maps() -> KeyMap<Action> {
@@ -35,6 +36,7 @@ fn default_maps() -> KeyMap<Action> {
             (key KeyCode::Backspace => Action::RemoveLast),
             (key KeyCode::Delete => Action::RemoveThis),
             (key KeyCode::Esc => Action::Exit)
+            // (key KeyCode::Right => Action::Move(Direction::Right))
         ),
     }
 }
@@ -100,9 +102,11 @@ impl Mode for Insert {
             (false, false) => "APPEND (ascii)".into(),
         }
     }
+
     fn has_half_cursor(&self) -> bool {
         self.hex_half.is_some()
     }
+
     fn transition(&self, evt: &Event, buffers: &mut Buffers, _: usize) -> Option<ModeTransition> {
         let buffer = buffers.current_mut();
         if let Some(action) = DEFAULT_MAPS.event_to_action(evt) {
