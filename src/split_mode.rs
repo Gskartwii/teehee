@@ -50,7 +50,7 @@ impl SearchAcceptor for Split {
         if pattern.pieces.is_empty() {
             return ModeTransition::new_mode(Normal::new());
         }
-        let matched_ranges = pattern.map_selections_to_matches(&buffer);
+        let matched_ranges = pattern.map_selections_to_matches(buffer);
         let matched_len: usize = matched_ranges
             .iter()
             .flatten()

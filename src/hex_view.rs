@@ -78,6 +78,7 @@ enum Priority {
 #[derive(Debug, Clone)]
 struct PrioritizedStyle {
     style: style::ContentStyle,
+    #[allow(dead_code)]
     priority: Priority,
 }
 

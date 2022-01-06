@@ -241,7 +241,7 @@ impl Mode for Normal {
                     let delta = ops::paste(
                         &buffer.data,
                         &buffer.selection,
-                        &buffer.registers.get(&register).unwrap_or(&vec![vec![]]),
+                        buffer.registers.get(&register).unwrap_or(&vec![vec![]]),
                         after,
                         self.count_state.to_count(),
                     );
