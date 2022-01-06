@@ -9,6 +9,7 @@ use super::operations as ops;
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 
+use crate::selection::Direction;
 use lazy_static::lazy_static;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -25,7 +26,7 @@ enum Action {
     RemoveLast,
     RemoveThis,
     Exit,
-    // Move(Direction),
+    Move(Direction),
 }
 
 fn default_maps() -> KeyMap<Action> {
@@ -35,8 +36,11 @@ fn default_maps() -> KeyMap<Action> {
             (ctrl 'o' => Action::SwitchInputMode),
             (key KeyCode::Backspace => Action::RemoveLast),
             (key KeyCode::Delete => Action::RemoveThis),
-            (key KeyCode::Esc => Action::Exit)
-            // (key KeyCode::Right => Action::Move(Direction::Right))
+            (key KeyCode::Esc => Action::Exit),
+            (key KeyCode::Right => Action::Move(Direction::Right)),
+            (key KeyCode::Left => Action::Move(Direction::Left)),
+            (key KeyCode::Up => Action::Move(Direction::Up)),
+            (key KeyCode::Down => Action::Move(Direction::Down))
         ),
     }
 }
@@ -107,7 +111,12 @@ impl Mode for Insert {
         self.hex_half.is_some()
     }
 
-    fn transition(&self, evt: &Event, buffers: &mut Buffers, _: usize) -> Option<ModeTransition> {
+    fn transition(
+        &self,
+        evt: &Event,
+        buffers: &mut Buffers,
+        bytes_per_line: usize,
+    ) -> Option<ModeTransition> {
         let buffer = buffers.current_mut();
         if let Some(action) = DEFAULT_MAPS.event_to_action(evt) {
             let new_state = if self.hex_half.is_some() {
@@ -160,6 +169,19 @@ impl Mode for Insert {
                     }
                     let delta = ops::delete_cursor(&buffer.data, &buffer.selection);
                     ModeTransition::DirtyBytes(buffer.apply_incomplete_delta(delta))
+                }
+                Action::Move(direction) => {
+                    let max_bytes = buffer.data.len();
+                    ModeTransition::new_mode_and_dirty(
+                        Insert {
+                            before: self.before,
+                            hex: self.hex,
+                            hex_half: self.hex_half,
+                        },
+                        buffer.map_selections(|region| {
+                            vec![region.simple_move(direction, bytes_per_line, max_bytes, 1)]
+                        }),
+                    )
                 }
             })
         } else if let Event::Key(KeyEvent {
