@@ -22,7 +22,7 @@ use std::io::Write;
 const VERTICAL: &str = "│";
 const LEFTARROW: &str = "";
 
-const COLOR_NULL: Color = Color::AnsiValue(242);
+const COLOR_NULL: Color = Color::AnsiValue(150);
 // const COLOR_OFFSET: Color = Color::AnsiValue(242);
 const COLOR_ASCII_PRINTABLE: Color = Color::Cyan;
 const COLOR_ASCII_WHITESPACE: Color = Color::Green;
@@ -53,7 +53,9 @@ fn colorize_byte(byte: u8, style_cmd: StylingCommand) -> StylingCommand {
         background_color: None,
         attributes: Default::default(),
     };
+
     let start_style = *style_cmd.start_style().unwrap_or(&default_content_style);
+
     style_cmd.with_start_style(PrioritizedStyle {
         style: style::ContentStyle {
             foreground_color: Some(get_byte_color(byte)),
@@ -560,6 +562,7 @@ impl HexView {
 
         queue!(stdout, style::Print(make_padding(padding_length)))?;
         self.draw_separator(stdout)?;
+
         self.draw_ascii_row(
             stdout,
             bytes.iter().copied().zip(mark_commands.iter().cloned()),
@@ -573,6 +576,10 @@ impl HexView {
                 queue_style(stdout, end_cmd)?;
             }
         }
+
+        queue!(stdout, style::Print(" "))?;
+        self.draw_separator(stdout)?;
+
         queue!(stdout, terminal::Clear(terminal::ClearType::UntilNewLine))?;
 
         Ok(())
@@ -618,9 +625,9 @@ impl HexView {
             style: style::ContentStyle::new()
                 .with(style::Color::AnsiValue(16))
                 .on(style::Color::Rgb {
-                    r: 235,
-                    g: 52,
-                    b: 107,
+                    r: 107,
+                    g: 108,
+                    b: 128,
                 }),
             priority: Priority::Cursor,
         }

@@ -68,7 +68,7 @@ impl Mode for Replace {
             if !self.hex {
                 let delta = ops::replace(&buffer.data, &buffer.selection, *ch as u8); // lossy!
                 Some(ModeTransition::new_mode_and_dirty(
-                    Normal::new(),
+                    Replace { hex: self.hex, hex_half: self.hex_half },
                     buffer.apply_delta(delta),
                 ))
             } else if self.hex_half.is_none() {
@@ -89,7 +89,7 @@ impl Mode for Replace {
                 let replacing_ch = (ch.to_digit(16).unwrap() as u8) | self.hex_half.unwrap();
                 let delta = ops::replace(&buffer.data, &buffer.selection, replacing_ch); // lossy!
                 Some(ModeTransition::new_mode_and_dirty(
-                    Normal::new(),
+                    Replace { hex: self.hex, hex_half: self.hex_half },
                     buffer.apply_delta(delta),
                 ))
             }
@@ -99,6 +99,7 @@ impl Mode for Replace {
             None
         }
     }
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
