@@ -66,7 +66,7 @@ impl Mode for Replace {
                     ))
                 }
                 Action::Move(direction) => {
-                    // we should not move if user already write half of the hex byte
+                    // we should not move if user already write a half of the hex byte
                     if self.hex_half.is_none() {
                         let max_bytes = buffer.data.len();
                         Some(ModeTransition::new_mode_and_dirty(
@@ -79,12 +79,10 @@ impl Mode for Replace {
                             }),
                         ))
                     } else {
-                        Some(ModeTransition::new_mode(
-                            Replace {
-                                hex: self.hex,
-                                hex_half: self.hex_half,
-                            }
-                        ))
+                        Some(ModeTransition::new_mode(Replace {
+                            hex: self.hex,
+                            hex_half: self.hex_half,
+                        }))
                     }
                 }
             };
@@ -128,7 +126,7 @@ impl Mode for Replace {
                 Some(ModeTransition::new_mode_and_dirty(
                     Replace {
                         hex: self.hex,
-                        hex_half: self.hex_half,
+                        hex_half: None,
                     },
                     buffer.apply_delta(delta),
                 ))
