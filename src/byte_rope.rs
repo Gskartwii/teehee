@@ -80,6 +80,7 @@ impl Metric<RopeInfo> for BaseMetric {
             o => Some(o - 1),
         }
     }
+
     fn next(b: &Bytes, offset: usize) -> Option<usize> {
         if offset == b.len() {
             None

@@ -266,6 +266,7 @@ impl Mode for Search {
             None
         }
     }
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }

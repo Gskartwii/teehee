@@ -11,6 +11,7 @@ impl Action {
     fn from_delta(delta: RopeDelta) -> Action {
         Action { delta }
     }
+
     fn invert(&self, base_rope: &Rope) -> Action {
         let (inserts, deletions) = self.delta.clone().factor();
         let ins_subset = inserts.inserted_subset();
@@ -26,6 +27,7 @@ impl Action {
             ),
         }
     }
+
     fn subsets_for_chain(self, next: RopeDelta) -> (Subset, Subset, Subset) {
         let (ins1, del1) = self.delta.factor();
         let (ins2, del2) = next.factor();
@@ -87,6 +89,7 @@ impl History {
             .push((Action::from_delta(delta).invert(current_rope), selection));
         self.redo = vec![];
     }
+
     pub fn perform_partial(
         &mut self,
         current_rope: &Rope,
@@ -106,6 +109,7 @@ impl History {
         );
         self.partial = Some(replaced);
     }
+
     pub fn commit_partial(&mut self) {
         if let Some((partial, selection)) = self.partial.take() {
             self.undo.push((partial, selection));

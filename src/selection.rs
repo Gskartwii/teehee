@@ -279,6 +279,7 @@ impl SelRegion {
             Direction::Left => cmp::max(0, old_caret as isize - count as isize) as usize,
             Direction::Right => cmp::min(max_size, old_caret + count),
         };
+
         SelRegion::new(caret_location, caret_location)
     }
 
