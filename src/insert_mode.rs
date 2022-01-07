@@ -171,17 +171,28 @@ impl Mode for Insert {
                     ModeTransition::DirtyBytes(buffer.apply_incomplete_delta(delta))
                 }
                 Action::Move(direction) => {
-                    let max_bytes = buffer.data.len();
-                    ModeTransition::new_mode_and_dirty(
-                        Insert {
-                            before: self.before,
-                            hex: self.hex,
-                            hex_half: self.hex_half,
-                        },
-                        buffer.map_selections(|region| {
-                            vec![region.simple_move(direction, bytes_per_line, max_bytes, 1)]
-                        }),
-                    )
+                    if self.hex_half.is_none() {
+                        let max_bytes = buffer.data.len();
+                        ModeTransition::new_mode_and_dirty(
+                            Insert {
+                                before: self.before,
+                                hex: self.hex,
+                                hex_half: self.hex_half,
+                            },
+                            buffer.map_selections(|region| {
+                                vec![region.simple_move(direction, bytes_per_line, max_bytes, 1)]
+                            }),
+                        )
+                    } else {
+                        // we should not move if user already write half of the hex byte
+                        ModeTransition::new_mode(
+                            Insert {
+                                before: self.before,
+                                hex: self.hex,
+                                hex_half: self.hex_half,
+                            },
+                        )
+                    }
                 }
             })
         } else if let Event::Key(KeyEvent {
