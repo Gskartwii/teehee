@@ -10,6 +10,7 @@ mod selection;
 
 mod cmd_count;
 
+mod byte_properties;
 mod collapse_mode;
 mod command_mode;
 mod insert_mode;
@@ -18,6 +19,7 @@ mod normal_mode;
 mod replace_mode;
 mod search_mode;
 mod split_mode;
+
 mod modes {
     pub mod quitting {
         use std::borrow::Cow;

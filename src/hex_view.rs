@@ -1,6 +1,6 @@
 use std::cell::Cell;
 use std::cmp;
-use std::collections::HashSet;
+use std::collections::{HashSet, BTreeSet};
 use std::fmt;
 use std::ops::Range;
 use std::time;
@@ -17,6 +17,8 @@ use xi_rope::Interval;
 use super::buffer::*;
 use super::mode::*;
 use super::modes;
+use crate::byte_properties::BytePropertiesFormatter;
+use crate::selection::SelRegion;
 use std::io::Write;
 
 const VERTICAL: &str = "│";
@@ -93,24 +95,29 @@ impl StylingCommand {
     fn start_style(&self) -> Option<&style::ContentStyle> {
         self.start.as_ref().map(|x| &x.style)
     }
+
     fn mid_style(&self) -> Option<&style::ContentStyle> {
         self.mid.as_ref().map(|x| &x.style)
     }
+
     fn end_style(&self) -> Option<&style::ContentStyle> {
         self.end.as_ref().map(|x| &x.style)
     }
+
     fn with_start_style(self, style: PrioritizedStyle) -> StylingCommand {
         StylingCommand {
             start: Some(style),
             ..self
         }
     }
+
     fn with_mid_style(self, style: PrioritizedStyle) -> StylingCommand {
         StylingCommand {
             mid: Some(style),
             ..self
         }
     }
+
     fn with_end_style(self, style: PrioritizedStyle) -> StylingCommand {
         StylingCommand {
             end: Some(style),
@@ -123,12 +130,15 @@ fn queue_style(stdout: &mut impl Write, style: &style::ContentStyle) -> Result<(
     if let Some(fg) = style.foreground_color {
         queue!(stdout, style::SetForegroundColor(fg))?;
     }
+
     if let Some(bg) = style.background_color {
         queue!(stdout, style::SetBackgroundColor(bg))?;
     }
+
     if !style.attributes.is_empty() {
         queue!(stdout, style::SetAttributes(style.attributes))?;
     }
+
     Ok(())
 }
 
@@ -527,6 +537,7 @@ impl HexView {
         offset: usize,
         mark_commands: &[StylingCommand],
         end_style: Option<StylingCommand>,
+        byte_properties_line: Option<String>,
     ) -> Result<()> {
         let row_num = self.offset_to_row(offset).unwrap();
 
@@ -580,6 +591,10 @@ impl HexView {
 
         queue!(stdout, style::Print(" "))?;
         self.draw_separator(stdout)?;
+
+        if let Some(byte_properties_line) = byte_properties_line {
+            queue!(stdout, style::Print(byte_properties_line))?;
+        }
 
         queue!(stdout, terminal::Clear(terminal::ClearType::UntilNewLine))?;
 
@@ -900,7 +915,7 @@ impl HexView {
         })
     }
 
-    fn draw_rows(&self, stdout: &mut impl Write, invalidated_rows: &HashSet<u16>) -> Result<()> {
+    fn draw_rows(&self, stdout: &mut impl Write, invalidated_rows: &BTreeSet<u16>) -> Result<()> {
         let visible_bytes = self.visible_bytes();
         let start_index = visible_bytes.start;
         let end_index = visible_bytes.end;
@@ -913,6 +928,27 @@ impl HexView {
 
         let max_bytes = visible_bytes_cow.len();
         let mark_commands = self.mark_commands(visible_bytes.clone());
+
+        let current_bytes = self
+            .buffers
+            .current()
+            .selection
+            .regions_in_range(visible_bytes.start, visible_bytes.end)
+            .iter()
+            .filter(|region| region.is_main())
+            .next()
+            .map(|v| {
+                let start = v.caret - start_index;
+                let end = if start + 4 > visible_bytes_cow.len() {
+                    visible_bytes_cow.len()
+                } else {
+                    start + 4
+                };
+                &visible_bytes_cow[start..end]
+            })
+            .unwrap_or_else(|| &[0]);
+
+        let mut byte_properties = BytePropertiesFormatter::new(current_bytes).iter();
 
         for i in visible_bytes.step_by(self.bytes_per_line) {
             if !invalidated_rows.contains(&self.offset_to_row(i).unwrap()) {
@@ -931,6 +967,7 @@ impl HexView {
                 } else {
                     None
                 },
+                byte_properties.next(),
             )?;
         }
 
@@ -958,6 +995,27 @@ impl HexView {
         let max_bytes = visible_bytes_cow.len();
         let mark_commands = self.mark_commands(visible_bytes.clone());
 
+        let current_bytes = self
+            .buffers
+            .current()
+            .selection
+            .regions_in_range(visible_bytes.start, visible_bytes.end)
+            .iter()
+            .filter(|region| region.is_main())
+            .next()
+            .map(|v| {
+                let start = v.caret - start_index;
+                let end = if start + 4 > visible_bytes_cow.len() {
+                    visible_bytes_cow.len()
+                } else {
+                    start + 4
+                };
+                &visible_bytes_cow[start..end]
+            })
+            .unwrap_or_else(|| &[]);
+
+        let mut byte_properties = BytePropertiesFormatter::new(current_bytes).iter();
+
         for i in visible_bytes.step_by(self.bytes_per_line) {
             let normalized_i = i - start_index;
             let normalized_end = std::cmp::min(max_bytes, normalized_i + self.bytes_per_line);
@@ -971,6 +1029,7 @@ impl HexView {
                 } else {
                     None
                 },
+                byte_properties.next(),
             )?;
         }
 
@@ -1011,11 +1070,14 @@ impl HexView {
                 cursor::MoveTo(0, self.size.1 - 2),
                 terminal::Clear(terminal::ClearType::CurrentLine),
             )?;
-            let invalidated_rows =
+
+            let mut invalidated_rows: BTreeSet<u16> =
                 (self.size.1 - 1 - line_count as u16..=self.size.1 - 2).collect();
+            invalidated_rows.extend(0..BytePropertiesFormatter::height());
             self.draw_rows(stdout, &invalidated_rows) // -1 is statusline
         }
     }
+
     fn scroll_up(&mut self, stdout: &mut impl Write, line_count: usize) -> Result<()> {
         self.start_offset -= 0x10 * line_count;
 
@@ -1029,7 +1091,9 @@ impl HexView {
                 cursor::MoveTo(0, self.size.1 - 1),
                 terminal::Clear(terminal::ClearType::CurrentLine),
             )?;
-            let invalidated_rows = (0..line_count as u16).collect();
+
+            let mut invalidated_rows: BTreeSet<u16> = (0..line_count as u16).collect();
+            invalidated_rows.extend(0..BytePropertiesFormatter::height());
             self.draw_rows(stdout, &invalidated_rows) // -1 is statusline
         }
     }
@@ -1086,7 +1150,7 @@ impl HexView {
                 self.maybe_update_offset(stdout)?;
 
                 let visible: Interval = self.visible_bytes().into();
-                let invalidated_rows = intervals
+                let mut invalidated_rows: BTreeSet<u16> = intervals
                     .into_iter()
                     .flat_map(|x| {
                         let intersection = visible.intersect(x);
@@ -1099,6 +1163,7 @@ impl HexView {
                     .map(|byte| ((byte - self.start_offset) / self.bytes_per_line) as u16)
                     .collect();
 
+                invalidated_rows.extend(0..BytePropertiesFormatter::height());
                 self.draw_rows(stdout, &invalidated_rows)
             }
             DirtyBytes::ChangeLength => self.maybe_update_offset_and_draw(stdout),
