@@ -1,6 +1,6 @@
 use std::cell::Cell;
 use std::cmp;
-use std::collections::{HashSet, BTreeSet};
+use std::collections::BTreeSet;
 use std::fmt;
 use std::ops::Range;
 use std::time;
@@ -18,8 +18,8 @@ use super::buffer::*;
 use super::mode::*;
 use super::modes;
 use crate::byte_properties::BytePropertiesFormatter;
-use crate::selection::SelRegion;
 use std::io::Write;
+use crossterm::style::Attributes;
 
 const VERTICAL: &str = "│";
 const LEFTARROW: &str = "";
@@ -84,11 +84,28 @@ struct PrioritizedStyle {
     priority: Priority,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 struct StylingCommand {
     start: Option<PrioritizedStyle>,
     mid: Option<PrioritizedStyle>,
     end: Option<PrioritizedStyle>,
+}
+
+impl Default for StylingCommand {
+    fn default() -> Self {
+        Self {
+            start: None,
+            mid: None,
+            end: Some(PrioritizedStyle {
+                style: style::ContentStyle {
+                    foreground_color: Some(Color::White),
+                    background_color: Some(Color::Reset),
+                    attributes: Attributes::default(),
+                },
+                priority: Priority::Basic,
+            })
+        }
+    }
 }
 
 impl StylingCommand {
@@ -556,6 +573,7 @@ impl HexView {
         } else {
             (self.bytes_per_line - bytes.len()) % self.bytes_per_line * 3
         };
+
         if let Some(style_cmd) = &end_style {
             padding_length -= 2;
 
@@ -579,6 +597,7 @@ impl HexView {
             stdout,
             bytes.iter().copied().zip(mark_commands.iter().cloned()),
         )?;
+
         if let Some(style_cmd) = end_style {
             if let Some(start_cmd) = style_cmd.start_style() {
                 queue_style(stdout, start_cmd)?;
@@ -589,7 +608,13 @@ impl HexView {
             }
         }
 
-        queue!(stdout, style::Print(" "))?;
+        let padding_length = if bytes.is_empty() {
+            self.bytes_per_line
+        } else {
+            (self.bytes_per_line - bytes.len()) % self.bytes_per_line
+        } + 1;
+
+        queue!(stdout, style::Print(make_padding(padding_length)))?;
         self.draw_separator(stdout)?;
 
         if let Some(byte_properties_line) = byte_properties_line {

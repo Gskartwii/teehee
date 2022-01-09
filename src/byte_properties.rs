@@ -1,15 +1,10 @@
 pub struct BytePropertiesFormatter<'a> {
     data: &'a [u8],
-    line: usize,
 }
 
 impl<'a> BytePropertiesFormatter<'a> {
     pub fn new(data: &'a [u8]) -> Self {
-        Self { data, line: 0 }
-    }
-
-    pub fn reset(&mut self) {
-        self.line = 0;
+        Self { data }
     }
 
     pub fn iter(&self) -> impl Iterator<Item = String> {
@@ -17,11 +12,13 @@ impl<'a> BytePropertiesFormatter<'a> {
         let data = vec![
             format!("hex: {:02x}", f_byte),
             format!("bin: {:08b}", f_byte),
+            format!("dec: {}", f_byte),
+            format!("oct: {:o}", f_byte),
         ];
         data.into_iter()
     }
 
     pub fn height() -> u16 {
-        2
+        4
     }
 }
