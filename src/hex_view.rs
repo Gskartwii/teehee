@@ -18,8 +18,8 @@ use super::buffer::*;
 use super::mode::*;
 use super::modes;
 use crate::byte_properties::BytePropertiesFormatter;
-use std::io::Write;
 use crossterm::style::Attributes;
+use std::io::Write;
 
 const VERTICAL: &str = "│";
 const LEFTARROW: &str = "";
@@ -103,7 +103,7 @@ impl Default for StylingCommand {
                     attributes: Attributes::default(),
                 },
                 priority: Priority::Basic,
-            })
+            }),
         }
     }
 }
@@ -960,8 +960,7 @@ impl HexView {
             .selection
             .regions_in_range(visible_bytes.start, visible_bytes.end)
             .iter()
-            .filter(|region| region.is_main())
-            .next()
+            .find(|region| region.is_main())
             .map(|v| {
                 let start = v.caret - start_index;
                 let end = if start + 4 > visible_bytes_cow.len() {
@@ -996,6 +995,19 @@ impl HexView {
             )?;
         }
 
+        let mut offset = (end_index / self.bytes_per_line + 1) * self.bytes_per_line;
+        while let Some(byte_properties) = byte_properties.next() {
+            self.draw_row(
+                stdout,
+                &[],
+                offset,
+                &[],
+                None,
+                Some(byte_properties),
+            )?;
+            offset += self.bytes_per_line;
+        }
+
         Ok(())
     }
 
@@ -1026,8 +1038,7 @@ impl HexView {
             .selection
             .regions_in_range(visible_bytes.start, visible_bytes.end)
             .iter()
-            .filter(|region| region.is_main())
-            .next()
+            .find(|region| region.is_main())
             .map(|v| {
                 let start = v.caret - start_index;
                 let end = if start + 4 > visible_bytes_cow.len() {
@@ -1056,6 +1067,19 @@ impl HexView {
                 },
                 byte_properties.next(),
             )?;
+        }
+
+        let mut offset = (end_index / self.bytes_per_line + 1) * self.bytes_per_line;
+        while let Some(byte_properties) = byte_properties.next() {
+            self.draw_row(
+                stdout,
+                &[],
+                offset,
+                &[],
+                None,
+                Some(byte_properties),
+            )?;
+            offset += self.bytes_per_line;
         }
 
         let new_full_rows =
