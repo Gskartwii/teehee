@@ -130,7 +130,7 @@ impl<'a> BytePropertiesFormatter<'a> {
     }
 
     pub fn are_all_printed(&self) -> bool {
-        self.line > 4
+        self.line > (BytePropertiesFormatter::height() - 1)
     }
 
     pub fn draw_line(
@@ -230,5 +230,9 @@ impl<'a> BytePropertiesFormatter<'a> {
         self.line += 1;
 
         Ok(())
+    }
+
+    pub fn height() -> usize {
+        5
     }
 }

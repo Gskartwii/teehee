@@ -924,8 +924,9 @@ impl HexView {
                 terminal::Clear(terminal::ClearType::CurrentLine),
             )?;
 
-            let invalidated_rows: BTreeSet<u16> =
+            let mut invalidated_rows: BTreeSet<u16> =
                 (self.size.1 - 1 - line_count as u16..=self.size.1 - 2).collect();
+            invalidated_rows.extend(0..BytePropertiesFormatter::height() as u16);
             self.draw_rows(stdout, &invalidated_rows) // -1 is statusline
         }
     }
@@ -944,7 +945,8 @@ impl HexView {
                 terminal::Clear(terminal::ClearType::CurrentLine),
             )?;
 
-            let invalidated_rows: BTreeSet<u16> = (0..line_count as u16).collect();
+            let mut invalidated_rows: BTreeSet<u16> = (0..line_count as u16).collect();
+            invalidated_rows.extend(0..BytePropertiesFormatter::height() as u16);
             self.draw_rows(stdout, &invalidated_rows) // -1 is statusline
         }
     }
@@ -1001,7 +1003,7 @@ impl HexView {
                 self.maybe_update_offset(stdout)?;
 
                 let visible: Interval = self.visible_bytes().into();
-                let invalidated_rows: BTreeSet<u16> = intervals
+                let mut invalidated_rows: BTreeSet<u16> = intervals
                     .into_iter()
                     .flat_map(|x| {
                         let intersection = visible.intersect(x);
@@ -1014,6 +1016,7 @@ impl HexView {
                     .map(|byte| ((byte - self.start_offset) / self.bytes_per_line) as u16)
                     .collect();
 
+                invalidated_rows.extend(0..BytePropertiesFormatter::height() as u16);
                 self.draw_rows(stdout, &invalidated_rows)
             }
             DirtyBytes::ChangeLength => self.maybe_update_offset_and_draw(stdout),
