@@ -16,7 +16,7 @@ use crossterm::{
 use xi_rope::Interval;
 
 use super::byte_properties::BytePropertiesFormatter;
-use super::{PrioritizedStyle, Priority, StylingCommand};
+use super::{make_padding, PrioritizedStyle, Priority, StylingCommand};
 use crate::buffer::*;
 use crate::hex_view::OutputColorizer;
 use crate::mode::*;
@@ -25,11 +25,6 @@ use std::io::Write;
 
 const VERTICAL: &str = "│";
 const LEFTARROW: &str = "";
-
-fn make_padding(len: usize) -> &'static str {
-    debug_assert!(len < 0x40, "can't make padding of len {}", len);
-    &"                                                                "[..len]
-}
 
 struct MixedRepr(u8);
 
@@ -821,14 +816,7 @@ impl HexView {
 
         let mut offset = (end_index / self.bytes_per_line + 1) * self.bytes_per_line;
         while byte_properties.are_all_printed() {
-            self.draw_row(
-                stdout,
-                &[],
-                offset,
-                &[],
-                None,
-                &mut byte_properties,
-            )?;
+            self.draw_row(stdout, &[], offset, &[], None, &mut byte_properties)?;
             offset += self.bytes_per_line;
         }
 
@@ -895,14 +883,7 @@ impl HexView {
 
         let mut offset = (end_index / self.bytes_per_line + 1) * self.bytes_per_line;
         while byte_properties.are_all_printed() {
-            self.draw_row(
-                stdout,
-                &[],
-                offset,
-                &[],
-                None,
-                &mut byte_properties,
-            )?;
+            self.draw_row(stdout, &[], offset, &[], None, &mut byte_properties)?;
             offset += self.bytes_per_line;
         }
 

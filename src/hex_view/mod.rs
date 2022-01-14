@@ -170,6 +170,11 @@ fn colorize_byte(byte: u8, style_cmd: &StylingCommand) -> StylingCommand {
     })
 }
 
+pub fn make_padding(len: usize) -> &'static str {
+    debug_assert!(len < 0x40, "can't make padding of len {}", len);
+    &"                                                                "[..len]
+}
+
 struct ByteAsciiRepr(u8);
 
 impl fmt::Display for ByteAsciiRepr {
