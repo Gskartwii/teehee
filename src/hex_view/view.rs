@@ -9,7 +9,6 @@ use crossterm::{
     cursor,
     event::{self, Event},
     execute, queue, style,
-    style::Attributes,
     style::{Color, Stylize},
     terminal, QueueableCommand, Result,
 };
@@ -412,9 +411,9 @@ impl HexView {
             padding_length -= 2;
 
             self.colorizer
-                .draw(stdout, ' ', &style_cmd.clone().with_mid_to_end());
+                .draw(stdout, ' ', &style_cmd.clone().with_mid_to_end())?;
             self.colorizer
-                .draw(stdout, ' ', &style_cmd.clone().take_end_only());
+                .draw(stdout, ' ', &style_cmd.clone().take_end_only())?;
         }
 
         queue!(stdout, style::Print(make_padding(padding_length)))?;
@@ -426,7 +425,7 @@ impl HexView {
         )?;
 
         if let Some(style_cmd) = end_style {
-            self.colorizer.draw(stdout, ' ', &style_cmd);
+            self.colorizer.draw(stdout, ' ', &style_cmd)?;
         }
 
         let padding_length = if bytes.is_empty() {
@@ -438,7 +437,7 @@ impl HexView {
         queue!(stdout, style::Print(make_padding(padding_length)))?;
         self.draw_separator(stdout)?;
 
-        byte_properties.draw_line(stdout, &self.colorizer);
+        byte_properties.draw_line(stdout, &self.colorizer)?;
 
         queue!(stdout, terminal::Clear(terminal::ClearType::UntilNewLine))?;
 
@@ -815,7 +814,7 @@ impl HexView {
         }
 
         let mut offset = (end_index / self.bytes_per_line + 1) * self.bytes_per_line;
-        while byte_properties.are_all_printed() {
+        while !byte_properties.are_all_printed() {
             self.draw_row(stdout, &[], offset, &[], None, &mut byte_properties)?;
             offset += self.bytes_per_line;
         }
@@ -882,7 +881,7 @@ impl HexView {
         }
 
         let mut offset = (end_index / self.bytes_per_line + 1) * self.bytes_per_line;
-        while byte_properties.are_all_printed() {
+        while !byte_properties.are_all_printed() {
             self.draw_row(stdout, &[], offset, &[], None, &mut byte_properties)?;
             offset += self.bytes_per_line;
         }
@@ -925,9 +924,8 @@ impl HexView {
                 terminal::Clear(terminal::ClearType::CurrentLine),
             )?;
 
-            let mut invalidated_rows: BTreeSet<u16> =
+            let invalidated_rows: BTreeSet<u16> =
                 (self.size.1 - 1 - line_count as u16..=self.size.1 - 2).collect();
-            invalidated_rows.extend(0..BytePropertiesFormatter::height());
             self.draw_rows(stdout, &invalidated_rows) // -1 is statusline
         }
     }
@@ -946,8 +944,7 @@ impl HexView {
                 terminal::Clear(terminal::ClearType::CurrentLine),
             )?;
 
-            let mut invalidated_rows: BTreeSet<u16> = (0..line_count as u16).collect();
-            invalidated_rows.extend(0..BytePropertiesFormatter::height());
+            let invalidated_rows: BTreeSet<u16> = (0..line_count as u16).collect();
             self.draw_rows(stdout, &invalidated_rows) // -1 is statusline
         }
     }
@@ -1004,7 +1001,7 @@ impl HexView {
                 self.maybe_update_offset(stdout)?;
 
                 let visible: Interval = self.visible_bytes().into();
-                let mut invalidated_rows: BTreeSet<u16> = intervals
+                let invalidated_rows: BTreeSet<u16> = intervals
                     .into_iter()
                     .flat_map(|x| {
                         let intersection = visible.intersect(x);
@@ -1017,7 +1014,6 @@ impl HexView {
                     .map(|byte| ((byte - self.start_offset) / self.bytes_per_line) as u16)
                     .collect();
 
-                invalidated_rows.extend(0..BytePropertiesFormatter::height());
                 self.draw_rows(stdout, &invalidated_rows)
             }
             DirtyBytes::ChangeLength => self.maybe_update_offset_and_draw(stdout),

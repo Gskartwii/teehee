@@ -1,7 +1,7 @@
 use crossterm::style::Attributes;
 use crossterm::{
     queue,
-    style::{self, Color, ContentStyle},
+    style::{self, Color},
     ErrorKind,
 };
 use std::fmt;
@@ -9,7 +9,7 @@ use std::fmt::Display;
 use std::io::Write;
 
 mod byte_properties;
-pub mod hex_view;
+pub mod view;
 
 const COLOR_NULL: Color = Color::AnsiValue(150);
 const COLOR_ASCII_PRINTABLE: Color = Color::Cyan;
@@ -81,6 +81,7 @@ impl StylingCommand {
         self.end.as_ref().map(|x| &x.style)
     }
 
+    #[must_use]
     pub fn with_start_style(self, style: PrioritizedStyle) -> Self {
         Self {
             start: Some(style),
@@ -88,6 +89,7 @@ impl StylingCommand {
         }
     }
 
+    #[must_use]
     pub fn with_mid_to_end(self) -> Self {
         let StylingCommand { start, mid, .. } = self;
         Self {
@@ -97,6 +99,7 @@ impl StylingCommand {
         }
     }
 
+    #[must_use]
     pub fn take_end_only(self) -> Self {
         let StylingCommand { end, .. } = self;
         Self {
@@ -106,6 +109,7 @@ impl StylingCommand {
         }
     }
 
+    #[must_use]
     fn with_mid_style(self, style: PrioritizedStyle) -> Self {
         Self {
             mid: Some(style),
@@ -113,6 +117,7 @@ impl StylingCommand {
         }
     }
 
+    #[must_use]
     fn with_end_style(self, style: PrioritizedStyle) -> Self {
         Self {
             end: Some(style),
@@ -259,5 +264,11 @@ impl OutputColorizer {
         }
 
         Ok(())
+    }
+}
+
+impl Default for OutputColorizer {
+    fn default() -> Self {
+        OutputColorizer::new()
     }
 }
