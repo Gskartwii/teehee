@@ -103,14 +103,14 @@ fn bytes_to_4_byte_vec(data: &[u8]) -> Vec<u8> {
 }
 
 fn utf16_into_char(data: &[u8]) -> Result<char, char> {
-    let max_char_len = if data.len() < 4 { data.len() } else { 4 };
+    if data.len() >= 2 {
+        if let Ok(s) = String::from_utf16(&vec![u16::from_be_bytes([data[0], data[1]])]) {
+            return Ok(s.chars().next().unwrap());
+        }
+    }
 
-    for i in (1..max_char_len).step_by(2) {
-        if let Ok(s) = String::from_utf16(
-            &(0..i)
-                .map(|i| u16::from_be_bytes([data[2 * i], data[2 * i + 1]]))
-                .collect::<Vec<_>>(),
-        ) {
+    if data.len() >= 4 {
+        if let Ok(s) = String::from_utf16(&vec![u16::from_be_bytes([data[0], data[1]]), u16::from_be_bytes([data[2], data[3]])]) {
             return Ok(s.chars().next().unwrap());
         }
     }
@@ -234,5 +234,16 @@ impl<'a> BytePropertiesFormatter<'a> {
 
     pub fn height() -> usize {
         5
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::hex_view::byte_properties::utf16_into_char;
+
+    #[test]
+    fn test_utf16_into_char() {
+        let data = &[0xdf, 0x76, 0xef, 0x8c];
+        utf16_into_char(data);
     }
 }
