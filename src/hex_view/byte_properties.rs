@@ -110,7 +110,10 @@ fn utf16_into_char(data: &[u8]) -> Result<char, char> {
     }
 
     if data.len() >= 4 {
-        if let Ok(s) = String::from_utf16(&vec![u16::from_be_bytes([data[0], data[1]]), u16::from_be_bytes([data[2], data[3]])]) {
+        if let Ok(s) = String::from_utf16(&vec![
+            u16::from_be_bytes([data[0], data[1]]),
+            u16::from_be_bytes([data[2], data[3]]),
+        ]) {
             return Ok(s.chars().next().unwrap());
         }
     }

@@ -20,6 +20,7 @@ use crate::buffer::*;
 use crate::hex_view::OutputColorizer;
 use crate::mode::*;
 use crate::modes;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::io::Write;
 
 const VERTICAL: &str = "│";
@@ -904,11 +905,29 @@ impl HexView {
                 self.draw(stdout)?;
                 Ok(())
             }
+            Event::Key(KeyEvent { code, modifiers }) => match (code, modifiers) {
+                (KeyCode::Char('e'), KeyModifiers::CONTROL) => {
+                    self.scroll_down(stdout, 1)?;
+                    self.draw(stdout);
+                    Ok(())
+                }
+                (KeyCode::Char('y'), KeyModifiers::CONTROL) => {
+                    self.scroll_up(stdout, 1)?;
+                    self.draw(stdout);
+                    Ok(())
+                }
+                _ => Ok(()),
+            },
             _ => Ok(()),
         }
     }
 
     fn scroll_down(&mut self, stdout: &mut impl Write, line_count: usize) -> Result<()> {
+        if self.visible_bytes().end >= self.buffers.current().data.len() {
+            // we already reach the bottom of the file
+            return Ok(());
+        }
+
         self.start_offset += 0x10 * line_count;
 
         if line_count > (self.size.1 - 1) as usize {
@@ -932,6 +951,11 @@ impl HexView {
     }
 
     fn scroll_up(&mut self, stdout: &mut impl Write, line_count: usize) -> Result<()> {
+        if self.start_offset < 0x10 * line_count {
+            // we already at the top the file
+            return Ok(());
+        }
+
         self.start_offset -= 0x10 * line_count;
 
         if line_count > (self.size.1 - 1) as usize {
