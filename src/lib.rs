@@ -10,7 +10,6 @@ mod selection;
 
 mod cmd_count;
 
-mod byte_properties;
 mod collapse_mode;
 mod command_mode;
 mod insert_mode;

@@ -9,173 +9,30 @@ use crossterm::{
     cursor,
     event::{self, Event},
     execute, queue, style,
+    style::Attributes,
     style::{Color, Stylize},
     terminal, QueueableCommand, Result,
 };
 use xi_rope::Interval;
 
-use super::buffer::*;
-use super::mode::*;
-use super::modes;
-use crate::byte_properties::BytePropertiesFormatter;
-use crossterm::style::Attributes;
+use super::byte_properties::BytePropertiesFormatter;
+use super::{PrioritizedStyle, Priority, StylingCommand};
+use crate::buffer::*;
+use crate::hex_view::OutputColorizer;
+use crate::mode::*;
+use crate::modes;
 use std::io::Write;
 
 const VERTICAL: &str = "│";
 const LEFTARROW: &str = "";
-
-const COLOR_NULL: Color = Color::AnsiValue(150);
-// const COLOR_OFFSET: Color = Color::AnsiValue(242);
-const COLOR_ASCII_PRINTABLE: Color = Color::Cyan;
-const COLOR_ASCII_WHITESPACE: Color = Color::Green;
-const COLOR_ASCII_OTHER: Color = Color::Rgb {
-    r: 232,
-    g: 52,
-    b: 210,
-};
-const COLOR_NONASCII: Color = Color::Yellow;
-
-fn get_byte_color(byte: u8) -> Color {
-    if byte == 0x00 {
-        COLOR_NULL
-    } else if byte.is_ascii_graphic() {
-        COLOR_ASCII_PRINTABLE
-    } else if byte.is_ascii_whitespace() {
-        COLOR_ASCII_WHITESPACE
-    } else if byte.is_ascii() {
-        COLOR_ASCII_OTHER
-    } else {
-        COLOR_NONASCII
-    }
-}
-
-fn colorize_byte(byte: u8, style_cmd: StylingCommand) -> StylingCommand {
-    let default_content_style = style::ContentStyle {
-        foreground_color: None,
-        background_color: None,
-        attributes: Default::default(),
-    };
-
-    let start_style = *style_cmd.start_style().unwrap_or(&default_content_style);
-
-    style_cmd.with_start_style(PrioritizedStyle {
-        style: style::ContentStyle {
-            foreground_color: Some(get_byte_color(byte)),
-            background_color: start_style.background_color,
-            attributes: start_style.attributes,
-        },
-        priority: Priority::Basic,
-    })
-}
-
-#[derive(Debug, Clone, Copy)]
-enum Priority {
-    Basic,
-    #[allow(dead_code)]
-    Mark,
-    Selection,
-    Cursor,
-}
-
-#[derive(Debug, Clone)]
-struct PrioritizedStyle {
-    style: style::ContentStyle,
-    #[allow(dead_code)]
-    priority: Priority,
-}
-
-#[derive(Debug, Clone)]
-struct StylingCommand {
-    start: Option<PrioritizedStyle>,
-    mid: Option<PrioritizedStyle>,
-    end: Option<PrioritizedStyle>,
-}
-
-impl Default for StylingCommand {
-    fn default() -> Self {
-        Self {
-            start: None,
-            mid: None,
-            end: Some(PrioritizedStyle {
-                style: style::ContentStyle {
-                    foreground_color: Some(Color::White),
-                    background_color: Some(Color::Reset),
-                    attributes: Attributes::default(),
-                },
-                priority: Priority::Basic,
-            }),
-        }
-    }
-}
-
-impl StylingCommand {
-    fn start_style(&self) -> Option<&style::ContentStyle> {
-        self.start.as_ref().map(|x| &x.style)
-    }
-
-    fn mid_style(&self) -> Option<&style::ContentStyle> {
-        self.mid.as_ref().map(|x| &x.style)
-    }
-
-    fn end_style(&self) -> Option<&style::ContentStyle> {
-        self.end.as_ref().map(|x| &x.style)
-    }
-
-    fn with_start_style(self, style: PrioritizedStyle) -> StylingCommand {
-        StylingCommand {
-            start: Some(style),
-            ..self
-        }
-    }
-
-    fn with_mid_style(self, style: PrioritizedStyle) -> StylingCommand {
-        StylingCommand {
-            mid: Some(style),
-            ..self
-        }
-    }
-
-    fn with_end_style(self, style: PrioritizedStyle) -> StylingCommand {
-        StylingCommand {
-            end: Some(style),
-            ..self
-        }
-    }
-}
-
-fn queue_style(stdout: &mut impl Write, style: &style::ContentStyle) -> Result<()> {
-    if let Some(fg) = style.foreground_color {
-        queue!(stdout, style::SetForegroundColor(fg))?;
-    }
-
-    if let Some(bg) = style.background_color {
-        queue!(stdout, style::SetBackgroundColor(bg))?;
-    }
-
-    if !style.attributes.is_empty() {
-        queue!(stdout, style::SetAttributes(style.attributes))?;
-    }
-
-    Ok(())
-}
 
 fn make_padding(len: usize) -> &'static str {
     debug_assert!(len < 0x40, "can't make padding of len {}", len);
     &"                                                                "[..len]
 }
 
-struct ByteAsciiRepr(u8);
-impl fmt::Display for ByteAsciiRepr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.0.is_ascii_graphic() || self.0 == 0x20 {
-            write!(f, "{}", char::from(self.0))
-        } else {
-            write!(f, ".")
-        }
-    }
-}
-
 struct MixedRepr(u8);
+
 impl fmt::Display for MixedRepr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self.0.is_ascii_graphic() || self.0 == 0x20 {
@@ -463,6 +320,7 @@ pub struct HexView {
     last_visible_rows: Cell<usize>,
     last_visible_prompt_col: Cell<usize>,
     last_draw_time: time::Duration,
+    colorizer: OutputColorizer,
 
     mode: Box<dyn Mode>,
     info: Option<String>,
@@ -477,8 +335,8 @@ impl HexView {
             size: terminal::size().unwrap(),
             last_visible_rows: Cell::new(0),
             last_visible_prompt_col: Cell::new(0),
-
             last_draw_time: Default::default(),
+            colorizer: OutputColorizer::new(),
 
             mode: Box::new(modes::normal::Normal::new()),
             info: None,
@@ -495,19 +353,7 @@ impl HexView {
         styled_bytes: impl IntoIterator<Item = (u8, StylingCommand)>,
     ) -> Result<()> {
         for (byte, style_cmd) in styled_bytes.into_iter() {
-            let style_cmd = colorize_byte(byte, style_cmd);
-            if let Some(start_cmd) = style_cmd.start_style() {
-                queue_style(stdout, start_cmd)?;
-            }
-            queue!(stdout, style::Print(format!("{:x}", byte >> 4)))?;
-            if let Some(mid_cmd) = style_cmd.mid_style() {
-                queue_style(stdout, mid_cmd)?;
-            }
-            queue!(stdout, style::Print(format!("{:x}", byte & 0xf)))?;
-            if let Some(end_cmd) = style_cmd.end_style() {
-                queue_style(stdout, end_cmd)?;
-            }
-            queue!(stdout, style::Print(" ".to_string()))?;
+            self.colorizer.draw_hex_byte(stdout, byte, &style_cmd)?;
         }
         Ok(())
     }
@@ -518,14 +364,7 @@ impl HexView {
         styled_bytes: impl IntoIterator<Item = (u8, StylingCommand)>,
     ) -> Result<()> {
         for (byte, style_cmd) in styled_bytes.into_iter() {
-            let style_cmd = colorize_byte(byte, style_cmd);
-            if let Some(start_cmd) = style_cmd.start_style() {
-                queue_style(stdout, start_cmd)?;
-            }
-            queue!(stdout, style::Print(format!("{}", ByteAsciiRepr(byte))))?;
-            if let Some(end_cmd) = style_cmd.end_style() {
-                queue_style(stdout, end_cmd)?;
-            }
+            self.colorizer.draw_ascii_byte(stdout, byte, &style_cmd)?;
         }
         Ok(())
     }
@@ -554,7 +393,7 @@ impl HexView {
         offset: usize,
         mark_commands: &[StylingCommand],
         end_style: Option<StylingCommand>,
-        byte_properties_line: Option<String>,
+        byte_properties: &mut BytePropertiesFormatter,
     ) -> Result<()> {
         let row_num = self.offset_to_row(offset).unwrap();
 
@@ -577,17 +416,10 @@ impl HexView {
         if let Some(style_cmd) = &end_style {
             padding_length -= 2;
 
-            if let Some(start_cmd) = style_cmd.start_style() {
-                queue_style(stdout, start_cmd)?;
-            }
-            queue!(stdout, style::Print(" "))?;
-            if let Some(mid_cmd) = style_cmd.mid_style() {
-                queue_style(stdout, mid_cmd)?;
-            }
-            queue!(stdout, style::Print(" "))?;
-            if let Some(end_cmd) = style_cmd.end_style() {
-                queue_style(stdout, end_cmd)?;
-            }
+            self.colorizer
+                .draw(stdout, ' ', &style_cmd.clone().with_mid_to_end());
+            self.colorizer
+                .draw(stdout, ' ', &style_cmd.clone().take_end_only());
         }
 
         queue!(stdout, style::Print(make_padding(padding_length)))?;
@@ -599,13 +431,7 @@ impl HexView {
         )?;
 
         if let Some(style_cmd) = end_style {
-            if let Some(start_cmd) = style_cmd.start_style() {
-                queue_style(stdout, start_cmd)?;
-            }
-            queue!(stdout, style::Print(" "))?;
-            if let Some(end_cmd) = style_cmd.end_style() {
-                queue_style(stdout, end_cmd)?;
-            }
+            self.colorizer.draw(stdout, ' ', &style_cmd);
         }
 
         let padding_length = if bytes.is_empty() {
@@ -617,9 +443,7 @@ impl HexView {
         queue!(stdout, style::Print(make_padding(padding_length)))?;
         self.draw_separator(stdout)?;
 
-        if let Some(byte_properties_line) = byte_properties_line {
-            queue!(stdout, style::Print(byte_properties_line))?;
-        }
+        byte_properties.draw_line(stdout, &self.colorizer);
 
         queue!(stdout, terminal::Clear(terminal::ClearType::UntilNewLine))?;
 
@@ -970,9 +794,9 @@ impl HexView {
                 };
                 &visible_bytes_cow[start..end]
             })
-            .unwrap_or_else(|| &[0]);
+            .unwrap_or_else(|| &[]);
 
-        let mut byte_properties = BytePropertiesFormatter::new(current_bytes).iter();
+        let mut byte_properties = BytePropertiesFormatter::new(current_bytes);
 
         for i in visible_bytes.step_by(self.bytes_per_line) {
             if !invalidated_rows.contains(&self.offset_to_row(i).unwrap()) {
@@ -991,19 +815,19 @@ impl HexView {
                 } else {
                     None
                 },
-                byte_properties.next(),
+                &mut byte_properties,
             )?;
         }
 
         let mut offset = (end_index / self.bytes_per_line + 1) * self.bytes_per_line;
-        while let Some(byte_properties) = byte_properties.next() {
+        while byte_properties.are_all_printed() {
             self.draw_row(
                 stdout,
                 &[],
                 offset,
                 &[],
                 None,
-                Some(byte_properties),
+                &mut byte_properties,
             )?;
             offset += self.bytes_per_line;
         }
@@ -1050,7 +874,7 @@ impl HexView {
             })
             .unwrap_or_else(|| &[]);
 
-        let mut byte_properties = BytePropertiesFormatter::new(current_bytes).iter();
+        let mut byte_properties = BytePropertiesFormatter::new(current_bytes);
 
         for i in visible_bytes.step_by(self.bytes_per_line) {
             let normalized_i = i - start_index;
@@ -1065,19 +889,19 @@ impl HexView {
                 } else {
                     None
                 },
-                byte_properties.next(),
+                &mut byte_properties,
             )?;
         }
 
         let mut offset = (end_index / self.bytes_per_line + 1) * self.bytes_per_line;
-        while let Some(byte_properties) = byte_properties.next() {
+        while byte_properties.are_all_printed() {
             self.draw_row(
                 stdout,
                 &[],
                 offset,
                 &[],
                 None,
-                Some(byte_properties),
+                &mut byte_properties,
             )?;
             offset += self.bytes_per_line;
         }

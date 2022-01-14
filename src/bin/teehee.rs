@@ -1,5 +1,5 @@
 use std::io::{stdout, BufWriter};
-use teehee::hex_view::HexView;
+use teehee::hex_view::hex_view::HexView;
 use teehee::{Buffer, Buffers};
 
 const STDOUT_BUF: usize = 8192;
