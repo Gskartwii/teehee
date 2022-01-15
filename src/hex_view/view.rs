@@ -433,7 +433,8 @@ impl HexView {
 
         if let Some(style_cmd) = end_style {
             padding_length -= 1;
-            self.colorizer.draw(stdout, ' ', &style_cmd)?;
+            self.colorizer
+                .draw(stdout, ' ', &style_cmd.take_end_only())?;
         }
 
         queue!(stdout, style::Print(make_padding(padding_length)))?;
@@ -815,7 +816,12 @@ impl HexView {
             )?;
         }
 
-        let mut offset = (end_index / self.bytes_per_line + 1) * self.bytes_per_line;
+        let a = end_index / self.bytes_per_line;
+        let mut offset = (if end_index % self.bytes_per_line == 0 {
+            a
+        } else {
+            a + 1
+        }) * self.bytes_per_line;
         while !byte_properties.are_all_printed() {
             self.draw_row(stdout, &[], offset, &[], None, &mut byte_properties)?;
             offset += self.bytes_per_line;
@@ -882,7 +888,12 @@ impl HexView {
             )?;
         }
 
-        let mut offset = (end_index / self.bytes_per_line + 1) * self.bytes_per_line;
+        let a = end_index / self.bytes_per_line;
+        let mut offset = (if end_index % self.bytes_per_line == 0 {
+            a
+        } else {
+            a + 1
+        }) * self.bytes_per_line;
         while !byte_properties.are_all_printed() {
             self.draw_row(stdout, &[], offset, &[], None, &mut byte_properties)?;
             offset += self.bytes_per_line;
