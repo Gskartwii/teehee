@@ -20,6 +20,7 @@ use crate::buffer::*;
 use crate::hex_view::OutputColorizer;
 use crate::mode::*;
 use crate::modes;
+use crate::selection::Direction;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::io::Write;
 
@@ -907,13 +908,29 @@ impl HexView {
             }
             Event::Key(KeyEvent { code, modifiers }) => match (code, modifiers) {
                 (KeyCode::Char('e'), KeyModifiers::CONTROL) => {
+                    let mut buffer = self.buffers.current_mut();
+                    let max_bytes = buffer.data.len();
+                    let bytes_per_line = self.bytes_per_line;
+
+                    buffer.map_selections(|region| {
+                        vec![region.simple_move(Direction::Down, bytes_per_line, max_bytes, 1)]
+                    });
+
                     self.scroll_down(stdout, 1)?;
-                    self.draw(stdout);
+                    self.draw(stdout)?;
                     Ok(())
                 }
                 (KeyCode::Char('y'), KeyModifiers::CONTROL) => {
+                    let mut buffer = self.buffers.current_mut();
+                    let max_bytes = buffer.data.len();
+                    let bytes_per_line = self.bytes_per_line;
+
+                    buffer.map_selections(|region| {
+                        vec![region.simple_move(Direction::Up, bytes_per_line, max_bytes, 1)]
+                    });
+
                     self.scroll_up(stdout, 1)?;
-                    self.draw(stdout);
+                    self.draw(stdout)?;
                     Ok(())
                 }
                 _ => Ok(()),
