@@ -425,15 +425,16 @@ impl HexView {
             bytes.iter().copied().zip(mark_commands.iter().cloned()),
         )?;
 
-        if let Some(style_cmd) = end_style {
-            self.colorizer.draw(stdout, ' ', &style_cmd)?;
-        }
-
-        let padding_length = if bytes.is_empty() {
+        let mut padding_length = if bytes.is_empty() {
             self.bytes_per_line
         } else {
             (self.bytes_per_line - bytes.len()) % self.bytes_per_line
         } + 1;
+
+        if let Some(style_cmd) = end_style {
+            padding_length -= 1;
+            self.colorizer.draw(stdout, ' ', &style_cmd)?;
+        }
 
         queue!(stdout, style::Print(make_padding(padding_length)))?;
         self.draw_separator(stdout)?;
