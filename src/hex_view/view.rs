@@ -2,12 +2,13 @@ use std::cell::Cell;
 use std::cmp;
 use std::collections::BTreeSet;
 use std::fmt;
+use std::io::Write;
 use std::ops::Range;
 use std::time;
 
 use crossterm::{
     cursor,
-    event::{self, Event},
+    event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     execute, queue, style,
     style::{Color, Stylize},
     terminal, QueueableCommand, Result,
@@ -18,11 +19,9 @@ use super::byte_properties::BytePropertiesFormatter;
 use super::{make_padding, PrioritizedStyle, Priority, StylingCommand};
 use crate::buffer::*;
 use crate::hex_view::OutputColorizer;
-use crate::mode::*;
 use crate::modes;
+use crate::modes::mode::{DirtyBytes, Mode, ModeTransition};
 use crate::selection::Direction;
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use std::io::Write;
 
 const VERTICAL: &str = "│";
 const LEFTARROW: &str = "";
@@ -908,7 +907,7 @@ impl HexView {
             }
             Event::Key(KeyEvent { code, modifiers }) => match (code, modifiers) {
                 (KeyCode::Char('e'), KeyModifiers::CONTROL) => {
-                    let mut buffer = self.buffers.current_mut();
+                    let buffer = self.buffers.current_mut();
                     let max_bytes = buffer.data.len();
                     let bytes_per_line = self.bytes_per_line;
 
@@ -921,7 +920,7 @@ impl HexView {
                     Ok(())
                 }
                 (KeyCode::Char('y'), KeyModifiers::CONTROL) => {
-                    let mut buffer = self.buffers.current_mut();
+                    let buffer = self.buffers.current_mut();
                     let max_bytes = buffer.data.len();
                     let bytes_per_line = self.bytes_per_line;
 

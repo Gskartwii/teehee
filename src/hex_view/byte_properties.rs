@@ -104,13 +104,13 @@ fn bytes_to_4_byte_vec(data: &[u8]) -> Vec<u8> {
 
 fn utf16_into_char(data: &[u8]) -> Result<char, char> {
     if data.len() >= 2 {
-        if let Ok(s) = String::from_utf16(&vec![u16::from_be_bytes([data[0], data[1]])]) {
+        if let Ok(s) = String::from_utf16(&[u16::from_be_bytes([data[0], data[1]])]) {
             return Ok(s.chars().next().unwrap());
         }
     }
 
     if data.len() >= 4 {
-        if let Ok(s) = String::from_utf16(&vec![
+        if let Ok(s) = String::from_utf16(&[
             u16::from_be_bytes([data[0], data[1]]),
             u16::from_be_bytes([data[2], data[3]]),
         ]) {

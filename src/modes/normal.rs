@@ -4,13 +4,14 @@ use std::collections::HashMap;
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use lazy_static::lazy_static;
 
-use super::buffer::*;
-use super::cmd_count;
-use super::keymap::*;
-use super::mode::*;
-use super::modes;
-use super::operations as ops;
-use super::selection::Direction;
+use crate::keymap::KeyMap;
+use crate::operations as ops;
+use crate::selection::Direction;
+use crate::{
+    cmd_count, modes,
+    modes::mode::{DirtyBytes, Mode, ModeTransition},
+    Buffers,
+};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct Normal {

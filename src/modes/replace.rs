@@ -1,15 +1,17 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 
-use super::buffer::*;
-use super::keymap::*;
-use super::mode::*;
-use super::modes::normal::Normal;
-use super::operations as ops;
-
 use crate::selection::Direction;
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use lazy_static::lazy_static;
+
+use crate::keymap::KeyMap;
+use crate::modes::{
+    mode::{Mode, ModeTransition},
+    normal::Normal,
+};
+use crate::operations as ops;
+use crate::Buffers;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct Replace {

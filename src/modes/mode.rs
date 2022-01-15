@@ -2,7 +2,7 @@ use crossterm::event::Event;
 use std::borrow::Cow;
 use xi_rope::Interval;
 
-use super::buffer::Buffers;
+use crate::Buffers;
 
 // A mode should OWN all data related to it. Hence we bound it by 'static.
 pub trait Mode: 'static {

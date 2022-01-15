@@ -1,11 +1,14 @@
-use super::buffer::Buffers;
-use super::mode::{Mode, ModeTransition};
-use super::modes::normal::Normal;
-use super::modes::search::{Pattern, SearchAcceptor};
-use super::selection::SelRegion;
 use std::borrow::Cow;
 
 use crossterm::event::Event;
+
+use crate::modes::search::{Pattern, SearchAcceptor};
+use crate::modes::{
+    mode::{Mode, ModeTransition},
+    normal::Normal,
+};
+use crate::selection::SelRegion;
+use crate::Buffers;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Collapse();
