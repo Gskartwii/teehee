@@ -211,7 +211,7 @@ impl Default for SelRegion {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy, Eq)]
 pub enum Direction {
     Up,
     Down,
@@ -279,6 +279,7 @@ impl SelRegion {
             Direction::Left => cmp::max(0, old_caret as isize - count as isize) as usize,
             Direction::Right => cmp::min(max_size, old_caret + count),
         };
+
         SelRegion::new(caret_location, caret_location)
     }
 
@@ -374,11 +375,11 @@ impl SelRegion {
         self.caret <= self.tail
     }
 
-    pub fn to_backward(&self) -> SelRegion {
+    pub fn to_backward(self) -> SelRegion {
         SelRegion::new(self.min(), self.max())
     }
 
-    pub fn to_forward(&self) -> SelRegion {
+    pub fn to_forward(self) -> SelRegion {
         SelRegion::new(self.max(), self.min())
     }
 
@@ -445,8 +446,8 @@ impl SelRegion {
     }
 }
 
-impl Into<Interval> for SelRegion {
-    fn into(self) -> Interval {
-        (self.min()..=self.max()).into()
+impl From<SelRegion> for Interval {
+    fn from(sel_region: SelRegion) -> Self {
+        (sel_region.min()..=sel_region.max()).into()
     }
 }

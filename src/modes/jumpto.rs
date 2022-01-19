@@ -1,27 +1,32 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 
-use super::buffer::*;
-use super::keymap::*;
-use super::mode::*;
-use super::modes::normal::Normal;
-use super::selection::*;
-
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+use lazy_static::lazy_static;
+
+use crate::keymap::KeyMap;
+use crate::modes::{
+    mode::{Mode, ModeTransition},
+    normal::Normal,
+};
+use crate::selection::Direction;
+use crate::Buffers;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct JumpTo {
     pub extend: bool,
 }
 
-use lazy_static::lazy_static;
-
 fn default_maps() -> KeyMap<Direction> {
     KeyMap {
         maps: keys!(
+            (key KeyCode::Left => Direction::Left),
             ('h' => Direction::Left),
+            (key KeyCode::Down => Direction::Down),
             ('j' => Direction::Down),
+            (key KeyCode::Up => Direction::Up),
             ('k' => Direction::Up),
+            (key KeyCode::Right => Direction::Right),
             ('l' => Direction::Right)
         ),
     }
@@ -67,6 +72,7 @@ impl Mode for JumpTo {
             None
         }
     }
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }

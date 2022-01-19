@@ -115,9 +115,10 @@ impl State {
             Transition::NotHandled
         }
     }
-    pub fn to_count(&self) -> usize {
+
+    pub fn to_count(self) -> usize {
         match self {
-            State::Some { count, .. } => *count,
+            State::Some { count, .. } => count,
             State::None => 1,
         }
     }

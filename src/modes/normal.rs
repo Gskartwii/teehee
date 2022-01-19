@@ -4,13 +4,14 @@ use std::collections::HashMap;
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use lazy_static::lazy_static;
 
-use super::buffer::*;
-use super::cmd_count;
-use super::keymap::*;
-use super::mode::*;
-use super::modes;
-use super::operations as ops;
-use super::selection::Direction;
+use crate::keymap::KeyMap;
+use crate::operations as ops;
+use crate::selection::Direction;
+use crate::{
+    cmd_count, modes,
+    modes::mode::{DirtyBytes, Mode, ModeTransition},
+    Buffers,
+};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct Normal {
@@ -49,9 +50,13 @@ fn default_maps() -> KeyMap<Action> {
     KeyMap {
         maps: keys!(
             ('h' => Action::Move(Direction::Left)),
+            (key KeyCode::Left => Action::Move(Direction::Left)),
             ('j' => Action::Move(Direction::Down)),
+            (key KeyCode::Down => Action::Move(Direction::Down)),
             ('k' => Action::Move(Direction::Up)),
+            (key KeyCode::Up => Action::Move(Direction::Up)),
             ('l' => Action::Move(Direction::Right)),
+            (key KeyCode::Right => Action::Move(Direction::Right)),
             ('H' => Action::Extend(Direction::Left)),
             ('J' => Action::Extend(Direction::Down)),
             ('K' => Action::Extend(Direction::Up)),
@@ -237,7 +242,7 @@ impl Mode for Normal {
                     let delta = ops::paste(
                         &buffer.data,
                         &buffer.selection,
-                        &buffer.registers.get(&register).unwrap_or(&vec![vec![]]),
+                        buffer.registers.get(&register).unwrap_or(&vec![vec![]]),
                         after,
                         self.count_state.to_count(),
                     );
