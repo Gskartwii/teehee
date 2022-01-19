@@ -36,6 +36,7 @@ Teehee supports multiple selections, efficient selection modifying commands and 
     * `k`: to file start
     * `j`: to file end
     * `<count>g` jumps to offset, `<count>G` extends to offset
+* `<C+e/y>` to scroll down/up
 * `;` to collapse selections to cursors
 * `<a-;>` (alt and ;) to swap cursor and selection end
 * `<a-s>` (alt and s) to split selection to multiple selections of size...

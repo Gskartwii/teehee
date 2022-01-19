@@ -1,10 +1,10 @@
 [package]
 name = "teehee"
 description = "Hex editor with inspiration from Vim, Kakoune and Hiew"
-version = "0.2.3"
+version = "0.2.5"
 authors = ["Gskartwii <ahannula4@gmail.com>"]
 license = "Apache-2.0"
-edition = "2018"
+edition = "2021"
 readme = "README.md"
 repository = "https://github.com/Gskartwii/teehee"
 keywords = ["cli", "terminal", "editor"]
