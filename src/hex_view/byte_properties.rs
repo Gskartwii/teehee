@@ -71,10 +71,10 @@ fn format_binary_byte(
 }
 
 fn format_char(c: char) -> String {
-    match c {
-        '\n' => "\\n".to_owned(),
-        '\x0d' => "\\x0d".to_owned(),
-        c => c.to_string(),
+    if c.is_ascii_graphic() {
+        c.to_string()
+    } else {
+        format!("{:x?}", c)
     }
 }
 
@@ -156,7 +156,7 @@ impl<'a> BytePropertiesFormatter<'a> {
                     &colorize_byte(first_byte, &DEFAULT_VALUE_STYLE),
                 )?;
 
-                colorizer.draw(stdout, "      hex u32: ", &DEFAULT_STYLE)?;
+                colorizer.draw(stdout, "          hex u32: ", &DEFAULT_STYLE)?;
                 for byte in self.data.iter() {
                     colorizer.draw_hex_byte(
                         stdout,
@@ -169,7 +169,7 @@ impl<'a> BytePropertiesFormatter<'a> {
                 colorizer.draw(stdout, "bin u8: ", &DEFAULT_STYLE)?;
                 format_binary_byte(stdout, colorizer, first_byte)?;
 
-                colorizer.draw(stdout, " bin u32: ", &DEFAULT_STYLE)?;
+                colorizer.draw(stdout, "     bin u32: ", &DEFAULT_STYLE)?;
                 for byte in self.data.iter() {
                     format_binary_byte(stdout, colorizer, *byte)?;
                     colorizer.draw(stdout, ' ', &DEFAULT_STYLE)?;
@@ -182,7 +182,7 @@ impl<'a> BytePropertiesFormatter<'a> {
                 colorizer.draw(stdout, "dec u8: ", &DEFAULT_STYLE)?;
                 colorizer.draw(stdout, byte_literal, &DEFAULT_VALUE_STYLE)?;
 
-                colorizer.draw(stdout, make_padding(8 - len), &DEFAULT_STYLE)?;
+                colorizer.draw(stdout, make_padding(12 - len), &DEFAULT_STYLE)?;
                 colorizer.draw(stdout, " dec u32: ", &DEFAULT_STYLE)?;
                 colorizer.draw(
                     stdout,
@@ -197,7 +197,7 @@ impl<'a> BytePropertiesFormatter<'a> {
                 colorizer.draw(stdout, "dec i8: ", &DEFAULT_STYLE)?;
                 colorizer.draw(stdout, byte_literal, &DEFAULT_VALUE_STYLE)?;
 
-                colorizer.draw(stdout, make_padding(8 - len), &DEFAULT_STYLE)?;
+                colorizer.draw(stdout, make_padding(12 - len), &DEFAULT_STYLE)?;
                 colorizer.draw(stdout, " dec i32: ", &DEFAULT_STYLE)?;
                 colorizer.draw(
                     stdout,
@@ -220,7 +220,7 @@ impl<'a> BytePropertiesFormatter<'a> {
                     }
                 };
 
-                colorizer.draw(stdout, make_padding(8 - len), &DEFAULT_STYLE)?;
+                colorizer.draw(stdout, make_padding(12 - len), &DEFAULT_STYLE)?;
                 colorizer.draw(stdout, "  utf-16: ", &DEFAULT_STYLE)?;
                 match utf16_into_char(self.data) {
                     Ok(c) => colorizer.draw(stdout, format_char(c), &DEFAULT_VALUE_STYLE),
