@@ -187,7 +187,7 @@ impl Command {
     fn finish(&self, buffers: &mut Buffers) -> ModeTransition {
         let (name, rest) = self
             .command
-            .split_at(self.command.find(' ').unwrap_or(self.command.len()));
+            .split_at(self.command.find(' ').unwrap_or_else(|| self.command.len()));
         if let Some(handler) = DEFAULT_COMMANDS.get(name) {
             handler(buffers, if rest.is_empty() { rest } else { &rest[1..] })
         } else {
