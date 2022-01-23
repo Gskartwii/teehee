@@ -1,15 +1,17 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 
-use super::buffer::*;
-use super::keymap::*;
-use super::mode::*;
-use super::modes::normal::Normal;
-use super::operations as ops;
-
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
-
 use lazy_static::lazy_static;
+
+use crate::keymap::KeyMap;
+use crate::modes::{
+    mode::{Mode, ModeTransition},
+    normal::Normal,
+};
+use crate::operations as ops;
+use crate::selection::Direction;
+use crate::{Buffer, Buffers};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct Insert {
@@ -25,6 +27,7 @@ enum Action {
     RemoveLast,
     RemoveThis,
     Exit,
+    Move(Direction),
 }
 
 fn default_maps() -> KeyMap<Action> {
@@ -34,7 +37,11 @@ fn default_maps() -> KeyMap<Action> {
             (ctrl 'o' => Action::SwitchInputMode),
             (key KeyCode::Backspace => Action::RemoveLast),
             (key KeyCode::Delete => Action::RemoveThis),
-            (key KeyCode::Esc => Action::Exit)
+            (key KeyCode::Esc => Action::Exit),
+            (key KeyCode::Right => Action::Move(Direction::Right)),
+            (key KeyCode::Left => Action::Move(Direction::Left)),
+            (key KeyCode::Up => Action::Move(Direction::Up)),
+            (key KeyCode::Down => Action::Move(Direction::Down))
         ),
     }
 }
@@ -100,10 +107,17 @@ impl Mode for Insert {
             (false, false) => "APPEND (ascii)".into(),
         }
     }
+
     fn has_half_cursor(&self) -> bool {
         self.hex_half.is_some()
     }
-    fn transition(&self, evt: &Event, buffers: &mut Buffers, _: usize) -> Option<ModeTransition> {
+
+    fn transition(
+        &self,
+        evt: &Event,
+        buffers: &mut Buffers,
+        bytes_per_line: usize,
+    ) -> Option<ModeTransition> {
         let buffer = buffers.current_mut();
         if let Some(action) = DEFAULT_MAPS.event_to_action(evt) {
             let new_state = if self.hex_half.is_some() {
@@ -157,6 +171,33 @@ impl Mode for Insert {
                     let delta = ops::delete_cursor(&buffer.data, &buffer.selection);
                     ModeTransition::DirtyBytes(buffer.apply_incomplete_delta(delta))
                 }
+                Action::Move(direction) => {
+                    let is_hex_half = self.hex_half.is_some();
+                    if is_hex_half {
+                        transition_hex_insertion('0', buffer, self.before, self.hex_half);
+                    }
+                    let max_bytes = buffer.data.len();
+                    ModeTransition::new_mode_and_dirty(
+                        Insert {
+                            before: self.before,
+                            hex: self.hex,
+                            hex_half: None,
+                        },
+                        buffer.map_selections(|region| {
+                            let mut region =
+                                region.simple_move(direction, bytes_per_line, max_bytes, 1);
+                            if is_hex_half {
+                                region = region.simple_move(
+                                    Direction::Left,
+                                    bytes_per_line,
+                                    max_bytes,
+                                    1,
+                                );
+                            }
+                            vec![region]
+                        }),
+                    )
+                }
             })
         } else if let Event::Key(KeyEvent {
             code: KeyCode::Char(key),
@@ -176,6 +217,7 @@ impl Mode for Insert {
             None
         }
     }
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }

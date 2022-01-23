@@ -38,6 +38,7 @@ Teehee supports multiple selections, efficient selection modifying commands and 
     * `k`: to file start
     * `j`: to file end
     * `<count>g` jumps to offset, `<count>G` extends to offset
+* `<C+e/y>` to scroll down/up
 * `;` to collapse selections to cursors
 * `<a-;>` (alt and ;) to swap cursor and selection end
 * `<a-s>` (alt and s) to split selection to multiple selections of size...
@@ -65,15 +66,15 @@ Teehee supports multiple selections, efficient selection modifying commands and 
 * `M` to measure length of current main selection (in bytes)
 * `u` to undo, `U` to redo
 * `:` to enter command mode
-	* `:q` to quit
-	* `:q!` to force quit (even if buffer dirty)
-	* `:w` to flush buffer to disk
-	* `:w <filename>` to save buffer to named file
-	* `:wa` to flush all buffers to disk
-	* `:e <filename>` to open a new buffer
-	* `:db` to close a buffer
-	* `:db!` to close a buffer even if dirty
-	* `:wq` to flush buffer, then quit
+    * `:q` to quit
+    * `:q!` to force quit (even if buffer dirty)
+    * `:w` to flush buffer to disk
+    * `:w <filename>` to save buffer to named file
+    * `:wa` to flush all buffers to disk
+    * `:e <filename>` to open a new buffer
+    * `:db` to close a buffer
+    * `:db!` to close a buffer even if dirty
+    * `:wq` to flush buffer, then quit
 
 Entering a pattern:
 
@@ -93,7 +94,7 @@ Counts:
 * Counts are inputted by typing digits 0-9 (in hex mode, 0-f).
 * `x` switches between hex and decimal mode.
 * Note that `a-f` may shadow some keys, so switch out of hex mode before running
-a command.
+  a command.
 * Example: `y5p`: yank the selection and paste it 5 times.
 * Example: `50l`: Move 50 bytes to the right.
 * Example: `x500g`: Jump to offset 0x500

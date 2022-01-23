@@ -1,7 +1,3 @@
-use super::buffer::*;
-use super::keymap::*;
-use super::mode::*;
-use super::modes::normal::Normal;
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use jetscii::ByteSubstring;
 use lazy_static::lazy_static;
@@ -10,6 +6,13 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ops::Range;
+
+use crate::keymap::KeyMap;
+use crate::modes::{
+    mode::{Mode, ModeTransition},
+    normal::Normal,
+};
+use crate::{Buffer, Buffers};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum PatternPiece {
@@ -172,13 +175,7 @@ impl Search {
 
 impl Mode for Search {
     fn name(&self) -> Cow<'static, str> {
-        self.next
-            .borrow()
-            .as_ref()
-            .unwrap()
-            .name()
-            .to_owned()
-            .into()
+        self.next.borrow().as_ref().unwrap().name()
     }
 
     fn transition(
@@ -272,6 +269,7 @@ impl Mode for Search {
             None
         }
     }
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }

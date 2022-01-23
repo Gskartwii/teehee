@@ -2,16 +2,17 @@ use std::borrow::Cow;
 use std::cmp;
 use std::collections::HashMap;
 
-use super::buffer::*;
-use super::cmd_count;
-use super::keymap::*;
-use super::mode::*;
-use super::modes::normal::Normal;
-use super::modes::search::{Pattern, PatternPiece, Search, SearchAcceptor};
-use super::selection::*;
-
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use lazy_static::lazy_static;
+
+use crate::keymap::KeyMap;
+use crate::modes::{
+    mode::{Mode, ModeTransition},
+    normal::Normal,
+    search::{Pattern, PatternPiece, Search, SearchAcceptor},
+};
+use crate::selection::SelRegion;
+use crate::{cmd_count, Buffers};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct Split {
@@ -50,7 +51,7 @@ impl SearchAcceptor for Split {
         if pattern.pieces.is_empty() {
             return ModeTransition::new_mode(Normal::new());
         }
-        let matched_ranges = pattern.map_selections_to_matches(&buffer);
+        let matched_ranges = pattern.map_selections_to_matches(buffer);
         let matched_len: usize = matched_ranges
             .iter()
             .flatten()
@@ -143,6 +144,7 @@ impl Mode for Split {
             None
         }
     }
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }

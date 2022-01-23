@@ -1,14 +1,17 @@
-use super::buffer::*;
-use super::keymap::*;
-use super::mode::*;
-use super::modes::normal::Normal;
-use super::modes::quitting;
-use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
-use lazy_static::lazy_static;
-use maplit::hashmap;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fs;
+
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+use lazy_static::lazy_static;
+use maplit::hashmap;
+
+use crate::keymap::KeyMap;
+use crate::modes::{
+    mode::{Mode, ModeTransition},
+    normal::Normal,
+};
+use crate::Buffers;
 
 pub struct Command {
     pub command: String,
@@ -40,6 +43,8 @@ fn default_maps() -> KeyMap<Action> {
 
 mod cmd {
     use super::*;
+    use crate::modes::mode::DirtyBytes;
+    use crate::modes::quitting;
 
     pub fn quit(buf: &mut Buffers, _: &str) -> ModeTransition {
         if buf.iter().any(|x| x.dirty && x.path.is_some()) {
@@ -58,7 +63,7 @@ mod cmd {
 
     pub fn write(buf: &mut Buffers, filename: &str) -> ModeTransition {
         let path = if filename.is_empty() {
-            buf.current().path.as_ref().map(|p| p.as_path())
+            buf.current().path.as_deref()
         } else {
             Some(std::path::Path::new(&filename))
         };
@@ -182,9 +187,9 @@ impl Command {
     fn finish(&self, buffers: &mut Buffers) -> ModeTransition {
         let (name, rest) = self
             .command
-            .split_at(self.command.find(' ').unwrap_or(self.command.len()));
+            .split_at(self.command.find(' ').unwrap_or_else(|| self.command.len()));
         if let Some(handler) = DEFAULT_COMMANDS.get(name) {
-            handler(buffers, if rest.len() == 0 { rest } else { &rest[1..] })
+            handler(buffers, if rest.is_empty() { rest } else { &rest[1..] })
         } else {
             ModeTransition::new_mode_and_info(Normal::new(), format!("Unknown command {}", name))
         }
@@ -239,6 +244,7 @@ impl Mode for Command {
             None
         }
     }
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }

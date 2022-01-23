@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 
 use super::byte_rope::*;
 use super::history::History;
-use super::mode::*;
-use super::selection::*;
+use crate::modes::mode::DirtyBytes;
+use crate::selection::{SelRegion, Selection};
 
 #[derive(Debug, PartialEq, Clone, Copy, Eq, Hash)]
 pub enum OverflowSelectionStyle {
@@ -232,6 +232,12 @@ impl Buffer {
 pub struct Buffers {
     list: Vec<Buffer>,
     cur_buf_index: usize,
+}
+
+impl Default for Buffers {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Buffers {
