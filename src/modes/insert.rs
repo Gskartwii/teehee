@@ -172,26 +172,25 @@ impl Mode for Insert {
                     ModeTransition::DirtyBytes(buffer.apply_incomplete_delta(delta))
                 }
                 Action::Move(direction) => {
-                    // we should not move if user already write a half of the hex byte
-                    if self.hex_half.is_none() {
-                        let max_bytes = buffer.data.len();
-                        ModeTransition::new_mode_and_dirty(
-                            Insert {
-                                before: self.before,
-                                hex: self.hex,
-                                hex_half: self.hex_half,
-                            },
-                            buffer.map_selections(|region| {
-                                vec![region.simple_move(direction, bytes_per_line, max_bytes, 1)]
-                            }),
-                        )
-                    } else {
-                        ModeTransition::new_mode(Insert {
+                    let is_hex_half = self.hex_half.is_some();
+                    if is_hex_half {
+                        let m = transition_hex_insertion('0', buffer, self.before, self.hex_half);
+                    }
+                    let max_bytes = buffer.data.len();
+                    ModeTransition::new_mode_and_dirty(
+                        Insert {
                             before: self.before,
                             hex: self.hex,
-                            hex_half: self.hex_half,
-                        })
-                    }
+                            hex_half: None,
+                        },
+                        buffer.map_selections(|region| {
+                            let mut region = region.simple_move(direction, bytes_per_line, max_bytes, 1);
+                            if is_hex_half {
+                               region = region.simple_move(Direction::Left, bytes_per_line, max_bytes, 1);
+                            }
+                            vec![region]
+                        }),
+                    )
                 }
             })
         } else if let Event::Key(KeyEvent {

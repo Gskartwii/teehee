@@ -1,11 +1,13 @@
 # Teehee - a modal terminal hex editor
 
+![AUR version](https://img.shields.io/aur/version/teehee)
 
 Inspired by Vim, Kakoune and Hiew.
 
 ## Installation
+Arch Linux users: The package for Arch Linux is available on [AUR](https://aur.archlinux.org/packages/teehee/).
 
-Just run `cargo install teehee`! If you don't have rust, you can get it from [rustup.rs](https://rustup.rs).
+Others: Just run `cargo install teehee`! If you don't have rust, you can get it from [rustup.rs](https://rustup.rs).
 The application will be available as the executable `teehee`. More installation options may be coming in the future.
 
 ## Motivation
@@ -64,15 +66,15 @@ Teehee supports multiple selections, efficient selection modifying commands and 
 * `M` to measure length of current main selection (in bytes)
 * `u` to undo, `U` to redo
 * `:` to enter command mode
-	* `:q` to quit
-	* `:q!` to force quit (even if buffer dirty)
-	* `:w` to flush buffer to disk
-	* `:w <filename>` to save buffer to named file
-	* `:wa` to flush all buffers to disk
-	* `:e <filename>` to open a new buffer
-	* `:db` to close a buffer
-	* `:db!` to close a buffer even if dirty
-	* `:wq` to flush buffer, then quit
+    * `:q` to quit
+    * `:q!` to force quit (even if buffer dirty)
+    * `:w` to flush buffer to disk
+    * `:w <filename>` to save buffer to named file
+    * `:wa` to flush all buffers to disk
+    * `:e <filename>` to open a new buffer
+    * `:db` to close a buffer
+    * `:db!` to close a buffer even if dirty
+    * `:wq` to flush buffer, then quit
 
 Entering a pattern:
 
@@ -92,7 +94,7 @@ Counts:
 * Counts are inputted by typing digits 0-9 (in hex mode, 0-f).
 * `x` switches between hex and decimal mode.
 * Note that `a-f` may shadow some keys, so switch out of hex mode before running
-a command.
+  a command.
 * Example: `y5p`: yank the selection and paste it 5 times.
 * Example: `50l`: Move 50 bytes to the right.
 * Example: `x500g`: Jump to offset 0x500
