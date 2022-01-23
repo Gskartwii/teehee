@@ -1,7 +1,7 @@
 [package]
 name = "teehee"
 description = "Hex editor with inspiration from Vim, Kakoune and Hiew"
-version = "0.2.5"
+version = "0.2.6"
 authors = ["Gskartwii <ahannula4@gmail.com>"]
 license = "Apache-2.0"
 edition = "2021"
@@ -13,7 +13,7 @@ categories = ["command-line-utilities"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-crossterm = "0.21.0"
+crossterm = "0.22.1"
 xi-rope = "0.3.0"
 lazy_static = "1.4.0"
 jetscii = "0.5"
