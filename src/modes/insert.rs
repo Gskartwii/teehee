@@ -57,7 +57,11 @@ lazy_static! {
     static ref DEFAULT_MAPS: KeyMap<Action> = default_maps();
 }
 
-fn transition_ascii_insertion(key: char, buffer: &mut Buffer, mode: InsertionMode) -> ModeTransition {
+fn transition_ascii_insertion(
+    key: char,
+    buffer: &mut Buffer,
+    mode: InsertionMode,
+) -> ModeTransition {
     let mut inserted_bytes = vec![0u8; key.len_utf8()];
     key.encode_utf8(&mut inserted_bytes);
 

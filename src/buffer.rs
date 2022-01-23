@@ -88,8 +88,9 @@ impl Buffer {
     }
 
     pub fn apply_delta(&mut self, delta: RopeDelta) -> DirtyBytes {
+        let max_len = self.data.len();
         self.apply_delta_to_buffer(delta.clone(), true);
-        self.selection.apply_delta(&delta, self.data.len());
+        self.selection.apply_delta(&delta, max_len);
 
         DirtyBytes::ChangeLength
     }
@@ -100,20 +101,18 @@ impl Buffer {
         caret_offset: isize,
         tail_offset: isize,
     ) -> DirtyBytes {
+        let max_len = self.data.len();
         self.apply_delta_to_buffer(delta.clone(), true);
-        self.selection.apply_delta_offset_carets(
-            &delta,
-            caret_offset,
-            tail_offset,
-            self.data.len(),
-        );
+        self.selection
+            .apply_delta_offset_carets(&delta, caret_offset, tail_offset, max_len);
 
         DirtyBytes::ChangeLength
     }
 
     pub fn apply_incomplete_delta(&mut self, delta: RopeDelta) -> DirtyBytes {
+        let max_len = self.data.len();
         self.apply_delta_to_buffer(delta.clone(), false);
-        self.selection.apply_delta(&delta, self.data.len());
+        self.selection.apply_delta(&delta, max_len);
 
         DirtyBytes::ChangeLength
     }
@@ -124,13 +123,10 @@ impl Buffer {
         caret_offset: isize,
         tail_offset: isize,
     ) -> DirtyBytes {
+        let max_len = self.data.len();
         self.apply_delta_to_buffer(delta.clone(), false);
-        self.selection.apply_delta_offset_carets(
-            &delta,
-            caret_offset,
-            tail_offset,
-            self.data.len(),
-        );
+        self.selection
+            .apply_delta_offset_carets(&delta, caret_offset, tail_offset, max_len);
 
         DirtyBytes::ChangeLength
     }

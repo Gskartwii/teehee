@@ -211,6 +211,12 @@ impl Default for SelRegion {
     }
 }
 
+impl std::fmt::Display for SelRegion {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}..{}", self.tail, self.caret)
+    }
+}
+
 #[derive(Debug, PartialEq, Clone, Copy, Eq)]
 pub enum Direction {
     Up,
@@ -390,7 +396,7 @@ impl SelRegion {
             (true, true) => {
                 assert_eq!(
                     self.caret, other.caret,
-                    "Can't merge disjoint cursor selections"
+                    "Can't merge disjoint cursor selections {self} and {other}",
                 );
                 *self
             }
