@@ -97,6 +97,23 @@ pub fn change(base: &Rope, selection: &Selection, text: impl Into<Rope>) -> Rope
     builder.build()
 }
 
+pub fn overwrite_half(base: &Rope, selection: &Selection, top: u8) -> RopeDelta {
+    let mut builder = DeltaBuilder::new(base.len());
+    for region in selection.iter() {
+        let iv = Interval::new(region.caret, region.caret + 1);
+
+        let base_char = if base.len() > region.caret {
+            base.slice_to_cow(iv)[0] & 0x0F
+        } else {
+            0
+        };
+
+        builder.replace(iv, Rope::from(vec![base_char | top]).into_node());
+    }
+
+    builder.build()
+}
+
 pub fn replace(base: &Rope, selection: &Selection, ch: u8) -> RopeDelta {
     let mut builder = DeltaBuilder::new(base.len());
     for region in selection.iter() {

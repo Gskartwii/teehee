@@ -13,6 +13,8 @@ use crate::{
     Buffers,
 };
 
+use super::insert::InsertionMode;
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct Normal {
     count_state: cmd_count::State,
@@ -35,6 +37,7 @@ enum Action {
     Change { hex: bool, register: char },
     Insert { hex: bool },
     Append { hex: bool },
+    Overwrite { hex: bool },
     RemoveMain,
     RetainMain,
     SelectPrev,
@@ -89,6 +92,8 @@ fn default_maps() -> KeyMap<Action> {
             ('A' => Action::Append{hex: true}),
             ('r' => Action::ReplaceMode{hex: false}),
             ('R' => Action::ReplaceMode{hex: true}),
+            ('o' => Action::Overwrite{hex: false}),
+            ('O' => Action::Overwrite{hex: true}),
 
             ('s' => Action::CollapseMode{hex: false}),
             ('S' => Action::CollapseMode{hex: true})
@@ -144,7 +149,7 @@ impl Mode for Normal {
                 Action::Insert { hex } => ModeTransition::new_mode_and_dirty(
                     modes::insert::Insert {
                         hex,
-                        before: true,
+                        mode: InsertionMode::Insert,
                         hex_half: None,
                     },
                     buffer.map_selections(|region| vec![region.to_backward()]),
@@ -152,7 +157,7 @@ impl Mode for Normal {
                 Action::Append { hex } => ModeTransition::new_mode_and_dirty(
                     modes::insert::Insert {
                         hex,
-                        before: false,
+                        mode: InsertionMode::Append,
                         hex_half: None,
                     },
                     {
@@ -169,6 +174,11 @@ impl Mode for Normal {
                 ),
                 Action::ReplaceMode { hex } => ModeTransition::new_mode(modes::replace::Replace {
                     hex,
+                    hex_half: None,
+                }),
+                Action::Overwrite { hex } => ModeTransition::new_mode(modes::insert::Insert {
+                    hex,
+                    mode: InsertionMode::Overwrite,
                     hex_half: None,
                 }),
                 Action::Move(direction) => {
@@ -221,7 +231,7 @@ impl Mode for Normal {
                         ModeTransition::new_mode_and_dirty(
                             modes::insert::Insert {
                                 hex,
-                                before: true,
+                                mode: InsertionMode::Insert,
                                 hex_half: None,
                             },
                             buffer.apply_delta(delta),
@@ -229,7 +239,7 @@ impl Mode for Normal {
                     } else {
                         ModeTransition::new_mode(modes::insert::Insert {
                             hex,
-                            before: true,
+                            mode: InsertionMode::Insert,
                             hex_half: None,
                         })
                     }
