@@ -1002,8 +1002,8 @@ impl HexView {
                 terminal::Clear(terminal::ClearType::CurrentLine),
             )?;
 
-            let mut invalidated_rows: BTreeSet<u16> = (0..line_count as u16).collect();
-            invalidated_rows.extend(0..BytePropertiesFormatter::height() as u16);
+            let invalidated_rows: BTreeSet<u16> =
+                (0..(line_count + BytePropertiesFormatter::height()) as u16).collect();
             self.draw_rows(stdout, &invalidated_rows) // -1 is statusline
         }
     }
