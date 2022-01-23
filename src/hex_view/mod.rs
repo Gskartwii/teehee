@@ -1,4 +1,3 @@
-use crossterm::style::Attributes;
 use crossterm::{
     queue,
     style::{self, Color},
@@ -37,35 +36,11 @@ pub struct PrioritizedStyle {
     priority: Priority,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct StylingCommand {
     start: Option<PrioritizedStyle>,
     mid: Option<PrioritizedStyle>,
     end: Option<PrioritizedStyle>,
-}
-
-impl Default for StylingCommand {
-    fn default() -> Self {
-        Self {
-            start: Some(PrioritizedStyle {
-                style: style::ContentStyle {
-                    foreground_color: Some(Color::White),
-                    background_color: Some(Color::Reset),
-                    attributes: Attributes::default(),
-                },
-                priority: Priority::Basic,
-            }),
-            mid: None,
-            end: Some(PrioritizedStyle {
-                style: style::ContentStyle {
-                    foreground_color: Some(Color::White),
-                    background_color: Some(Color::Reset),
-                    attributes: Attributes::default(),
-                },
-                priority: Priority::Basic,
-            }),
-        }
-    }
 }
 
 impl StylingCommand {

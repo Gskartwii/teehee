@@ -174,7 +174,7 @@ impl Mode for Insert {
                 Action::Move(direction) => {
                     let is_hex_half = self.hex_half.is_some();
                     if is_hex_half {
-                        let m = transition_hex_insertion('0', buffer, self.before, self.hex_half);
+                        transition_hex_insertion('0', buffer, self.before, self.hex_half);
                     }
                     let max_bytes = buffer.data.len();
                     ModeTransition::new_mode_and_dirty(
@@ -184,9 +184,15 @@ impl Mode for Insert {
                             hex_half: None,
                         },
                         buffer.map_selections(|region| {
-                            let mut region = region.simple_move(direction, bytes_per_line, max_bytes, 1);
+                            let mut region =
+                                region.simple_move(direction, bytes_per_line, max_bytes, 1);
                             if is_hex_half {
-                               region = region.simple_move(Direction::Left, bytes_per_line, max_bytes, 1);
+                                region = region.simple_move(
+                                    Direction::Left,
+                                    bytes_per_line,
+                                    max_bytes,
+                                    1,
+                                );
                             }
                             vec![region]
                         }),

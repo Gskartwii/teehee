@@ -365,6 +365,7 @@ impl HexView {
     }
 
     fn draw_separator(&self, stdout: &mut impl Write) -> Result<()> {
+        queue!(stdout, style::SetForegroundColor(Color::White))?;
         queue!(stdout, style::Print(format!("{} ", VERTICAL)))
     }
 
@@ -468,7 +469,11 @@ impl HexView {
         PrioritizedStyle {
             style: style::ContentStyle::new()
                 .with(style::Color::Black)
-                .on(style::Color::DarkYellow),
+                .on(style::Color::Rgb {
+                    r: 110,
+                    g: 97,
+                    b: 16,
+                }),
             priority: Priority::Selection,
         }
     }
