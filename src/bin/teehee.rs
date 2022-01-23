@@ -1,3 +1,5 @@
+#![deny(clippy::all)]
+
 use std::io::{stdout, BufWriter};
 use teehee::hex_view::view::HexView;
 use teehee::{Buffer, Buffers};

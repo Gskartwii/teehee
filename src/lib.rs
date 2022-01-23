@@ -1,3 +1,5 @@
+#![deny(clippy::all)]
+
 mod buffer;
 mod byte_rope;
 pub mod hex_view;
