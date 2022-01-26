@@ -246,7 +246,7 @@ mod tests {
 
     #[test]
     fn test_utf16_into_char() {
-        let data = &[0xdf, 0x76, 0xef, 0x8c];
-        utf16_into_char(data).unwrap();
+        let data = &[0xd8, 0x01, 0xdc, 0x37];
+        assert_eq!(utf16_into_char(data), Ok('𐐷'));
     }
 }
