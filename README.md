@@ -28,8 +28,9 @@ Teehee supports multiple selections, efficient selection modifying commands and 
 * `hjkl` for movement (press shift to extend selection instead)
 ```
     ^
-< h j l >
     k
+< h   l >
+    j
     v
 ```
 * `g`[`hjkl`] for jumping (`G`[`hjkl`] to extend selection instead)
